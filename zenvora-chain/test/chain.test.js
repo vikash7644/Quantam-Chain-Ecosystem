@@ -107,3 +107,25 @@ test("mined chain survives restart and validates saved data", () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("adopts only a longer valid peer chain", () => {
+  const local = new ZenvoraChain();
+  const peer = new ZenvoraChain();
+  peer.mineBlock();
+  const result = local.replaceChain(JSON.parse(JSON.stringify(peer.blocks)));
+  assert.equal(result.adopted, true);
+  assert.equal(local.info().height, 1);
+  assert.equal(local.verifyChain(), true);
+});
+
+test("rejects invalid peer chains without changing local state", () => {
+  const local = new ZenvoraChain();
+  const peer = new ZenvoraChain();
+  peer.mineBlock();
+  const candidate = JSON.parse(JSON.stringify(peer.blocks));
+  candidate[1].timestamp = "tampered";
+  const result = local.replaceChain(candidate);
+  assert.equal(result.adopted, false);
+  assert.equal(local.info().height, 0);
+  assert.equal(local.verifyChain(), true);
+});
