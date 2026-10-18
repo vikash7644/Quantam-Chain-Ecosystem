@@ -86,6 +86,37 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/mine") {
       return send(res, 201, chain.mineBlock());
     }
+    if (req.method === "POST" && url.pathname === "/sync") {
+      if (peers.length === 0) return send(res, 200, { adopted: false, message: "No trusted peers configured. Set ZENVORA_PEERS on this node." });
+      const results = [];
+      for (const peer of peers) {
+        try {
+          const peerUrl = new URL(peer);
+          if (!["http:", "https:"].includes(peerUrl.protocol) || peerUrl.username || peerUrl.password) {
+            throw new Error("Peer URL must be an http(s) URL without embedded credentials.");
+          }
+          peerUrl.pathname = "/chain";
+          peerUrl.search = "";
+          peerUrl.hash = "";
+          const response = await fetch(peerUrl, { signal: AbortSignal.timeout(3000) });
+          if (!response.ok) throw new Error("Peer returned HTTP " + response.status);
+          const raw = await response.text();
+          if (raw.length > 5 * 1024 * 1024) throw new Error("Peer chain response exceeds 5 MiB limit.");
+          const remote = JSON.parse(raw);
+          if (remote.chainId !== CHAIN_ID || !Array.isArray(remote.blocks)) throw new Error("Peer returned an incompatible chain.");
+          const result = chain.replaceChain(remote.blocks);
+          results.push({ peer: peerUrl.origin, ...result });
+        } catch (error) {
+          results.push({ peer, adopted: false, reason: error.message || "Peer sync failed." });
+        }
+      }
+      return send(res, 200, {
+        chainId: CHAIN_ID,
+        height: chain.blocks.length - 1,
+        results,
+        warning: "Longest-valid-chain sync is experimental and is not Byzantine-fault-tolerant consensus. Configure only trusted devnet peers."
+      });
+    }
     if (req.method === "GET" && url.pathname === "/verify") {
       return send(res, 200, { valid: chain.verifyChain() });
     }
