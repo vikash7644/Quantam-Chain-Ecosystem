@@ -1,4 +1,6 @@
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const CHAIN_ID = "ZENVORA-DEVNET-1";
 const SYMBOL = "tZVR";
@@ -45,7 +47,8 @@ function hashBlock(block) {
 }
 
 class ZenvoraChain {
-  constructor() {
+  constructor({ dataFile = null } = {}) {
+    this.dataFile = dataFile;
     this.pending = [];
     this.blocks = [{
       index: 0,
@@ -57,6 +60,29 @@ class ZenvoraChain {
       hash: ""
     }];
     this.blocks[0].hash = hashBlock(this.blocks[0]);
+
+    if (this.dataFile && fs.existsSync(this.dataFile)) {
+      const saved = JSON.parse(fs.readFileSync(this.dataFile, "utf8"));
+      if (!saved || saved.chainId !== CHAIN_ID || !Array.isArray(saved.blocks) || saved.blocks.length === 0) {
+        throw new Error("Saved chain data has an invalid format; refusing to start.");
+      }
+      this.blocks = saved.blocks;
+      if (!this.verifyChain()) {
+        throw new Error("Saved chain data failed verification; refusing to start.");
+      }
+    }
+  }
+
+  persist() {
+    if (!this.dataFile) return;
+    const directory = path.dirname(this.dataFile);
+    fs.mkdirSync(directory, { recursive: true });
+    const temporary = this.dataFile + ".tmp";
+    fs.writeFileSync(temporary, JSON.stringify({
+      chainId: CHAIN_ID,
+      blocks: this.blocks
+    }, null, 2), { mode: 0o600 });
+    fs.renameSync(temporary, this.dataFile);
   }
 
   info() {
@@ -72,7 +98,7 @@ class ZenvoraChain {
     };
   }
 
-  getBalance(address) {
+  getConfirmedBalance(address) {
     let balance = 0;
     for (const block of this.blocks) {
       for (const tx of block.transactions) {
@@ -80,6 +106,12 @@ class ZenvoraChain {
         if (tx.type === "transfer" && tx.from === address) balance -= tx.amount;
       }
     }
+    return balance;
+  }
+
+  // Includes pending transactions; this is a preview, not a confirmed balance.
+  getBalance(address) {
+    let balance = this.getConfirmedBalance(address);
     for (const tx of this.pending) {
       if (tx.to === address) balance += tx.amount;
       if (tx.type === "transfer" && tx.from === address) balance -= tx.amount;
@@ -121,7 +153,8 @@ class ZenvoraChain {
     const reserved = this.pending
       .filter(item => item.type === "transfer" && item.from === tx.from)
       .reduce((sum, item) => sum + item.amount, 0);
-    if (this.getBalance(tx.from) - reserved < tx.amount) {
+    // Only confirmed funds are spendable; reserve prior pending outgoing transfers once.
+    if (this.getConfirmedBalance(tx.from) - reserved < tx.amount) {
       throw new Error("Insufficient test balance.");
     }
     this.pending.push({
@@ -149,6 +182,13 @@ class ZenvoraChain {
       this.blocks.pop();
       this.pending.unshift(...block.transactions);
       throw new Error("Block rejected: chain verification failed.");
+    }
+    try {
+      this.persist();
+    } catch (error) {
+      this.blocks.pop();
+      this.pending.unshift(...block.transactions);
+      throw new Error("Block was not committed because chain persistence failed: " + error.message);
     }
     return block;
   }
