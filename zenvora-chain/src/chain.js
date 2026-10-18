@@ -193,19 +193,23 @@ class ZenvoraChain {
     return block;
   }
 
-  verifyChain() {
+  validateBlocks(blocks) {
+    if (!Array.isArray(blocks) || blocks.length === 0) return false;
     const balances = new Map();
     const faucetTotals = new Map();
-    for (let i = 0; i < this.blocks.length; i++) {
-      const block = this.blocks[i];
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (!block || !Array.isArray(block.transactions)) return false;
       if (block.index !== i || block.chainId !== CHAIN_ID) return false;
       if (block.hash !== hashBlock(block)) return false;
       if (i === 0) {
         if (block.previousHash !== "0".repeat(64)) return false;
-      } else if (block.previousHash !== this.blocks[i - 1].hash) return false;
+        if (block.timestamp !== new Date(0).toISOString() || block.transactions.length !== 0) return false;
+      } else if (block.previousHash !== blocks[i - 1].hash) return false;
 
       for (const tx of block.transactions) {
-        if (tx.chainId !== CHAIN_ID || !Number.isSafeInteger(tx.amount) || tx.amount <= 0) return false;
+        if (!tx || tx.chainId !== CHAIN_ID || !Number.isSafeInteger(tx.amount) || tx.amount <= 0) return false;
+        if (typeof tx.to !== "string" || !/^zvr_[a-f0-9]{40}$/.test(tx.to)) return false;
         if (tx.type === "faucet") {
           if (tx.from !== "TEST_FAUCET") return false;
           const total = (faucetTotals.get(tx.to) || 0) + tx.amount;
@@ -222,6 +226,32 @@ class ZenvoraChain {
       }
     }
     return true;
+  }
+
+  verifyChain() {
+    return this.validateBlocks(this.blocks);
+  }
+
+  replaceChain(candidateBlocks) {
+    if (!Array.isArray(candidateBlocks) || candidateBlocks.length <= this.blocks.length) {
+      return { adopted: false, reason: "Candidate chain is not longer." };
+    }
+    if (!this.validateBlocks(candidateBlocks)) {
+      return { adopted: false, reason: "Candidate chain failed validation." };
+    }
+
+    const previousBlocks = this.blocks;
+    const previousPending = this.pending;
+    this.blocks = candidateBlocks;
+    this.pending = [];
+    try {
+      this.persist();
+    } catch (error) {
+      this.blocks = previousBlocks;
+      this.pending = previousPending;
+      return { adopted: false, reason: "Could not persist candidate chain: " + error.message };
+    }
+    return { adopted: true, height: this.blocks.length - 1, discardedPending: previousPending.length };
   }
 
   getBlock(index) {
