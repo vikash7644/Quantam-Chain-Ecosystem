@@ -1,10 +1,11 @@
 const http = require("node:http");
 const { URL } = require("node:url");
 const path = require("node:path");
-const { ZenvoraChain, createWallet, signTransfer } = require("./chain");
+const { ZenvoraChain, createWallet, signTransfer, CHAIN_ID } = require("./chain");
 
 const dataFile = process.env.ZENVORA_DATA_FILE || path.join(__dirname, "..", "data", "chain.json");
 const chain = new ZenvoraChain({ dataFile });
+const peers = (process.env.ZENVORA_PEERS || "").split(",").map(value => value.trim()).filter(Boolean);
 const PORT = Number(process.env.PORT || 8545);
 const HOST = process.env.HOST || "127.0.0.1";
 
@@ -42,6 +43,8 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (req.method === "GET" && url.pathname === "/") return send(res, 200, chain.info());
+    if (req.method === "GET" && url.pathname === "/chain") return send(res, 200, { chainId: CHAIN_ID, height: chain.blocks.length - 1, blocks: chain.blocks });
+    if (req.method === "GET" && url.pathname === "/peers") return send(res, 200, { configuredPeers: peers.length, peers });
     if (req.method === "GET" && url.pathname === "/blocks") return send(res, 200, chain.blocks);
     if (req.method === "GET" && url.pathname.startsWith("/blocks/")) {
       const block = chain.getBlock(Number(url.pathname.slice("/blocks/".length)));
