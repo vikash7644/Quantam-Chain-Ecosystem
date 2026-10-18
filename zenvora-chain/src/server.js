@@ -1,8 +1,10 @@
 const http = require("node:http");
 const { URL } = require("node:url");
+const path = require("node:path");
 const { ZenvoraChain, createWallet, signTransfer } = require("./chain");
 
-const chain = new ZenvoraChain();
+const dataFile = process.env.ZENVORA_DATA_FILE || path.join(__dirname, "..", "data", "chain.json");
+const chain = new ZenvoraChain({ dataFile });
 const PORT = Number(process.env.PORT || 8545);
 const HOST = process.env.HOST || "127.0.0.1";
 
@@ -49,7 +51,16 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/balance") {
       const address = url.searchParams.get("address");
       if (!address) return send(res, 400, { error: "address query parameter required." });
-      return send(res, 200, { address, balance: chain.getBalance(address), symbol: "tZVR" });
+      const confirmedBalance = chain.getConfirmedBalance(address);
+      const pendingPreviewBalance = chain.getBalance(address);
+      return send(res, 200, {
+        address,
+        confirmedBalance,
+        pendingDelta: pendingPreviewBalance - confirmedBalance,
+        pendingPreviewBalance,
+        symbol: "tZVR",
+        note: "Only confirmedBalance is spendable; pendingPreviewBalance includes unconfirmed transactions."
+      });
     }
     if (req.method === "POST" && url.pathname === "/wallet/create") {
       const wallet = createWallet();
