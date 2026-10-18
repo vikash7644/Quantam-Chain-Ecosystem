@@ -9,6 +9,7 @@ A small, local-only blockchain prototype for learning and testing the Zenvora ec
 - Ed25519 wallet keys and signed test transfers
 - Test faucet with a per-address cap
 - Balance, block, health, and verification endpoints
+- Experimental sync with explicitly configured trusted peers; longer candidate chains are fully validated before adoption
 - Automated tests for genesis, faucet, transfers, tampered signatures, and faucet caps
 
 ## Requirements
@@ -52,10 +53,17 @@ Inspect the chain and a balance (the response separates confirmed funds from pen
 ```sh
 curl http://127.0.0.1:8545/
 curl http://127.0.0.1:8545/blocks
+curl http://127.0.0.1:8545/chain
 curl 'http://127.0.0.1:8545/balance?address=zvr_REPLACE_WITH_ADDRESS'
 curl http://127.0.0.1:8545/verify
 ```
 
+## Experimental peer sync
+
+A node can expose its chain with `GET /chain`. To configure a node to sync from one or more trusted peers, set `ZENVORA_PEERS` to a comma-separated list of peer base URLs before starting it, for example `ZENVORA_PEERS=http://127.0.0.1:8546`. Then call `POST /sync`. Peer URLs must be configured by the operator; the API does not accept arbitrary peer URLs from request bodies. Sync uses a longer-valid-chain rule and discards pending transactions if a replacement is adopted.
+
+**This is not real distributed consensus.** There is no peer identity/authentication, gossip protocol, fork-choice weight, validator set, Sybil resistance, or Byzantine fault tolerance. Use only trusted nodes in a local test environment; do not expose these endpoints to the public internet.
+
 ## Important limitations
 
-This is a **single-process devnet prototype**, not a public multi-node testnet or production blockchain. Mined blocks are persisted locally as JSON and checked on startup, but this is not a production-grade database or backup strategy. Pending transactions are in memory and reset when the process restarts. There is no peer-to-peer consensus, transaction fees, contract VM, or production wallet protection. Faucet and mining endpoints are intended for local development only. Do not use real funds or reuse these keys. A real public testnet needs persistent storage, peer networking, consensus design, rate limits, independent security review, and monitored deployments.
+This is a **single-process devnet prototype**, not a public multi-node testnet or production blockchain. Mined blocks are persisted locally as JSON and checked on startup, but this is not a production-grade database or backup strategy. Pending transactions are in memory and reset when the process restarts. Peer sync is experimental and does not provide consensus or peer authentication. There are no transaction fees, contract VM, or production wallet protection. Faucet and mining endpoints are intended for local development only. Do not use real funds or reuse these keys. A real public testnet needs persistent storage, peer networking, consensus design, rate limits, independent security review, and monitored deployments.
