@@ -1,0 +1,12 @@
+{
+  "name": "zenvora-testnet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-only Zenvora Chain devnet and test ZVR faucet",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}
