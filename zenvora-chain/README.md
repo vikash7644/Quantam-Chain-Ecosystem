@@ -13,7 +13,7 @@ A small, local-only blockchain prototype for learning and testing the Zenvora ec
 
 ## Requirements
 
-Node.js 20 or newer. No database or third-party packages are needed.
+Node.js 20 or newer. No third-party packages are needed. Mined blocks are saved to a local JSON file by default.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ npm test
 npm start
 ```
 
-The server binds to `127.0.0.1:8545` by default, so it is not exposed to the public internet. To change the port, set `PORT`. Do not set `HOST=0.0.0.0` on an untrusted network.
+The server binds to `127.0.0.1:8545` by default, so it is not exposed to the public internet. Mined blocks are saved to `zenvora-chain/data/chain.json` by default; set `ZENVORA_DATA_FILE` to choose another file path. Pending transactions are intentionally discarded on restart. To change the port, set `PORT`. Do not set `HOST=0.0.0.0` on an untrusted network.
 
 ## Quick API test
 
@@ -47,7 +47,7 @@ Mine pending transactions:
 curl -X POST http://127.0.0.1:8545/mine
 ```
 
-Inspect the chain and a balance:
+Inspect the chain and a balance (the response separates confirmed funds from pending preview):
 
 ```sh
 curl http://127.0.0.1:8545/
@@ -58,4 +58,4 @@ curl http://127.0.0.1:8545/verify
 
 ## Important limitations
 
-This is a **single-process devnet prototype**, not a public multi-node testnet or production blockchain. State is held in memory and resets when the process restarts. It has no peer-to-peer consensus, persistent database, transaction fees, contract VM, or production wallet protection. Faucet and mining endpoints are intended for local development only. Do not use real funds or reuse these keys. A real public testnet needs persistent storage, peer networking, consensus design, rate limits, independent security review, and monitored deployments.
+This is a **single-process devnet prototype**, not a public multi-node testnet or production blockchain. Mined blocks are persisted locally as JSON and checked on startup, but this is not a production-grade database or backup strategy. Pending transactions are in memory and reset when the process restarts. There is no peer-to-peer consensus, transaction fees, contract VM, or production wallet protection. Faucet and mining endpoints are intended for local development only. Do not use real funds or reuse these keys. A real public testnet needs persistent storage, peer networking, consensus design, rate limits, independent security review, and monitored deployments.
