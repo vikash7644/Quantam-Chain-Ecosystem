@@ -1,0 +1,27 @@
+name: Zenvora Chain Devnet Tests
+
+on:
+  push:
+    paths:
+      - "zenvora-chain/**"
+      - ".github/workflows/zenvora-testnet.yml"
+  pull_request:
+    paths:
+      - "zenvora-chain/**"
+      - ".github/workflows/zenvora-testnet.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zenvora-chain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
