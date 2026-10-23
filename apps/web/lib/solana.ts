@@ -1,11 +1,11 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 
 export const connection = new Connection(
-  process.env.NEXT_PUBLIC_RPC_URL || 'https://api.devnet.solana.com'
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"
 );
 
-export async function getBalance(address: string) {
+export async function getAddressBalance(address: string) {
   const publicKey = new PublicKey(address);
-  const balance = await connection.getBalance(publicKey);
-  return balance / 1_000_000_000;
+  const balanceInLamports = await connection.getBalance(publicKey);
+  return balanceInLamports / LAMPORTS_PER_SOL;
 }
