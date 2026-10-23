@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10111c">
+  <title>Fleur Wallet</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#0c0d16;--panel:#171927;--line:#2a2d42;--text:#f7f4ff;--muted:#a5a7bd;--gold:#e4c779;--purple:#9275ff;--red:#ffb6b6}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#222044 0,var(--bg) 52%);color:var(--text);font:15px system-ui,-apple-system,sans-serif}
+    main{max-width:760px;margin:auto;padding:22px 16px 42px}.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:48px;height:48px;border:1px solid #b9a25d;border-radius:16px;color:var(--gold);font-size:29px;background:#211f2c}
+    h1{font-size:23px;margin:0}small,.muted{color:var(--muted)}.tag{font-size:11px;border:1px solid var(--line);padding:5px 8px;border-radius:999px}
+    .hero{margin:22px 0 14px;padding:20px;border:1px solid #4d456a;border-radius:22px;background:linear-gradient(135deg,#292341,#151725 70%)}.label{font-size:12px;color:var(--muted)}.balance{font-size:30px;font-weight:750;margin:8px 0}.actions,.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+    button{border:1px solid var(--line);border-radius:13px;padding:12px 14px;background:#25283b;color:var(--text);font-weight:650;cursor:pointer}button.primary{background:var(--purple);border-color:var(--purple);color:#fff}button:disabled{opacity:.45;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.card{background:#141622;border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}.card h2{font-size:16px;margin:0 0 12px}.field{display:block;width:100%;padding:12px;margin:8px 0 10px;background:#0d0f19;border:1px solid var(--line);border-radius:12px;color:var(--text)}
+    .notice{font-size:12px;line-height:1.5;color:#d5d2e7;background:#222136;border-radius:12px;padding:11px;margin-top:12px}.warn{color:var(--red)}.address{overflow-wrap:anywhere;font-family:ui-monospace,monospace;font-size:12px;color:#c8c0ff}.hidden{display:none}.stat{font-size:24px;font-weight:750}.footer{font-size:12px;line-height:1.6;color:var(--muted);margin-top:18px}
+  </style>
+</head>
+<body><main>
+  <header class="brand"><div class="logo">⚜</div><div><h1>Fleur Wallet</h1><small>Telegram Mini App · wallet prototype</small></div><span class="tag">TEST UI</span></header>
+  <section class="hero">
+    <div class="label">Wallet overview</div><div class="balance" id="balance">Not connected</div><div class="address" id="address">Create or import a wallet to see your public address.</div>
+    <div class="actions"><button class="primary" id="showCreate">Create wallet</button><button id="showImport">Import keystore</button><button id="exportBtn" disabled>Export encrypted backup</button></div>
+    <div class="notice warn">Prototype only. Do not deposit real funds or use a wallet containing valuable assets.</div>
+  </section>
+  <section class="grid">
+    <div class="card"><h2>⚡ Rewards / mining</h2><div class="stat" id="points">0 points</div><p class="muted">Demo activity points only — not a coin, not withdrawable, and not tradable.</p><button class="primary" id="claimBtn">Claim demo points</button><p class="label" id="claimStatus">One local demo claim per day.</p></div>
+    <div class="card"><h2>⇄ Buy · Sell · Swap</h2><p class="muted">Token trading is not connected yet. No live quotes or trades are available in this prototype.</p><button disabled>Swap (not live)</button><button disabled>Buy / Sell (not live)</button><p class="label">Needs a deployed chain, RPC, token contracts, liquidity and reviewed transaction flows.</p></div>
+  </section>
+  <section class="card hidden" id="createPanel"><h2>Create a new wallet</h2><p class="muted">A new wallet is generated on this device. Save your recovery phrase offline. Never send it to anyone.</p><label for="newPassword">Password to encrypt backup (12+ characters)</label><input class="field" id="newPassword" type="password" minlength="12" autocomplete="new-password" placeholder="Strong backup password"><button class="primary" id="generateBtn">Generate wallet</button><div id="created" class="hidden"><p class="warn">Recovery phrase — write it down offline. Anyone who gets it can control this wallet.</p><textarea class="field" id="phrase" rows="3" readonly></textarea><button id="hidePhrase">Hide recovery phrase</button><p class="label">Public address</p><div class="address" id="newAddress"></div><p class="label">Encrypted backup JSON (save it safely)</p><textarea class="field" id="backup" rows="4" readonly></textarea><button id="downloadBackup">Download encrypted backup</button></div></section>
+  <section class="card hidden" id="importPanel"><h2>Import encrypted backup</h2><p class="muted">Select an encrypted JSON keystore file. Its password is used only in this browser session.</p><input class="field" id="keystoreFile" type="file" accept=".json,application/json"><input class="field" id="importPassword" type="password" autocomplete="current-password" placeholder="Backup password"><button class="primary" id="importBtn">Decrypt and load wallet</button></section>
+  <section class="card"><h2>Network</h2><p><strong>Fleur Network</strong> <span class="tag">not configured</span></p><p class="muted">Native FLEUR balance and on-chain transfers will appear only after a real network and RPC are deployed and verified. The FLEUR label alone does not create a coin.</p></section>
+  <p class="footer">Security note: this prototype uses ethers.js loaded from a CDN and has not been audited. Do not use it for real funds. Wallet operations stay client-side in this demo; do not paste seed phrases into chats or support forms.</p>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+  let wallet = null, encryptedBackup = '';
+  const storageKey = 'fleur_demo_points_v1';
+  function pointsState(){try{return JSON.parse(localStorage.getItem(storageKey)||'{"points":0,"lastClaim":""}')}catch{return {points:0,lastClaim:''}}}
+  function renderPoints(){const s=pointsState();$('points').textContent=s.points+' points';$('claimBtn').disabled=s.lastClaim===new Date().toISOString().slice(0,10);$('claimStatus').textContent=$('claimBtn').disabled?'Demo points already claimed today.':'Local demo claim; no token is issued.'}
+  function setWallet(w){wallet=w;$('balance').textContent='EVM wallet created';$('address').textContent=w.address;$('exportBtn').disabled=!encryptedBackup;$('showCreate').disabled=true;$('showImport').disabled=true;}
+  $('showCreate').onclick=()=>{$('createPanel').classList.remove('hidden');$('importPanel').classList.add('hidden')};
+  $('showImport').onclick=()=>{$('importPanel').classList.remove('hidden');$('createPanel').classList.add('hidden')};
+  $('generateBtn').onclick=async()=>{try{
+    if(!window.ethers)throw Error('Wallet library failed to load. Check connection and reload.');
+    const password=$('newPassword').value;if(password.length<12)throw Error('Use a backup password of at least 12 characters.');
+    const w=ethers.Wallet.createRandom(); const phrase=w.mnemonic.phrase;
+    encryptedBackup=await w.encrypt(password); setWallet(w);
+    $('phrase').value=phrase;$('newAddress').textContent=w.address;$('backup').value=encryptedBackup;$('created').classList.remove('hidden');$('newPassword').value='';
+  }catch(e){alert(e.message||'Wallet creation failed.')}};
+  $('hidePhrase').onclick=()=>{$('phrase').value='[Hidden. If you did not save it offline, restore may be impossible.]'};
+  $('downloadBackup').onclick=()=>{if(!encryptedBackup)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([encryptedBackup],{type:'application/json'}));a.download='fleur-wallet-encrypted-backup.json';a.click();URL.revokeObjectURL(a.href)};
+  $('exportBtn').onclick=()=>{if(!encryptedBackup)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([encryptedBackup],{type:'application/json'}));a.download='fleur-wallet-encrypted-backup.json';a.click();URL.revokeObjectURL(a.href)};
+  $('importBtn').onclick=async()=>{try{const file=$('keystoreFile').files[0];if(!file)throw Error('Choose an encrypted JSON keystore file.');const password=$('importPassword').value;if(!password)throw Error('Enter the backup password.');const text=await file.text();const w=await ethers.Wallet.fromEncryptedJson(text,password);encryptedBackup=text;setWallet(w);$('importPassword').value='';$('importPanel').classList.add('hidden');}catch(e){alert('Could not import wallet. Check the file and password.')}};
+  $('claimBtn').onclick=()=>{const s=pointsState(),today=new Date().toISOString().slice(0,10);if(s.lastClaim===today)return;s.points+=10;s.lastClaim=today;localStorage.setItem(storageKey,JSON.stringify(s));renderPoints()};
+  renderPoints();
+})();
+</script></body></html>
