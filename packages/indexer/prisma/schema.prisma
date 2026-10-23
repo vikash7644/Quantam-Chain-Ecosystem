@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TokenLaunch {
+  id          String   @id @default(cuid())
+  symbol      String
+  name        String
+  creator     String
+  mintAddress String   @unique
+  createdAt   DateTime @default(now())
+  price       Float
+  marketCap   Float
+  volume      Float
+  holders     Int
+}
