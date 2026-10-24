@@ -62,7 +62,7 @@ impl SignedTransaction {
 pub struct Block {
     pub height: u64,
     pub previous_hash: String,
-    pub transactions: Vec<Transaction>,
+    pub transactions: Vec<SignedTransaction>,
 }
 
 impl Block {
@@ -137,13 +137,12 @@ impl LedgerState {
         Ok(())
     }
 
-    /// Applies a batch atomically. Callers must authenticate each transaction
-    /// before passing it to this low-level block method; signed block validation
-    /// will be wired into the node layer.
+    /// Apply a block atomically and authenticate every transaction. Invalid
+    /// signatures or state transitions leave the original state untouched.
     pub fn apply_block(&mut self, block: &Block) -> Result<(), ProtocolError> {
         let mut candidate = self.clone();
         for tx in &block.transactions {
-            candidate.apply_transfer(tx)?;
+            candidate.apply_signed_transfer(tx)?;
         }
         *self = candidate;
         Ok(())
@@ -270,10 +269,12 @@ mod tests {
     #[test]
     fn invalid_late_transaction_rolls_back_entire_block() {
         let mut state = LedgerState::with_genesis([("alice".into(), 100)]);
+        let first = signed_transfer(0, 10, 1);
+        let second = signed_transfer(1, 10_000, 1);
         let block = Block {
             height: 1,
             previous_hash: "genesis".into(),
-            transactions: vec![transfer(0, 10, 1), transfer(1, 10_000, 1)],
+            transactions: vec![first, second],
         };
         let before = state.clone();
         assert_eq!(state.apply_block(&block), Err(ProtocolError::InsufficientFunds));
@@ -285,7 +286,7 @@ mod tests {
         let block = Block {
             height: 1,
             previous_hash: "genesis".into(),
-            transactions: vec![transfer(0, 7, 1)],
+            transactions: vec![signed_transfer(0, 7, 1)],
         };
         assert_eq!(block.hash().unwrap(), block.hash().unwrap());
         assert_eq!(block.hash().unwrap().len(), 64);
