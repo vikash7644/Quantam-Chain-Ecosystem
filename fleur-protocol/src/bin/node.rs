@@ -1,8 +1,4 @@
-use axum::{
-    extract::State,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, routing::post, Json, Router};
 use fleur_protocol::{Block, LedgerState, PersistentChain, SignedTransaction};
 use serde_json::{json, Value};
 use std::{
@@ -49,10 +45,7 @@ async fn main() {
     axum::serve(listener, app).await.expect("serve Fleur RPC");
 }
 
-async fn handle_rpc(
-    State(chain): State<SharedChain>,
-    Json(request): Json<Value>,
-) -> Json<Value> {
+async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>) -> Json<Value> {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     if request.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return rpc_error(id, -32600, "Invalid JSON-RPC request");
