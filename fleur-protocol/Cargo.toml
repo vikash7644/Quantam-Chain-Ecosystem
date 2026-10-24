@@ -6,7 +6,9 @@ description = "Fleur Network independent blockchain protocol testnet scaffold"
 license = "MIT"
 
 [dependencies]
+axum = "0.8"
 ed25519-dalek = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
