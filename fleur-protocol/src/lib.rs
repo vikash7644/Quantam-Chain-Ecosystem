@@ -1,9 +1,10 @@
 //! Fleur Network's independent protocol core.
 //!
-//! This first sprint slice is intentionally a deterministic local ledger model,
-//! not a production consensus implementation. Transaction authentication and
-//! network consensus are explicit follow-up milestones before any public testnet.
+//! This is a deterministic protocol prototype, not a production consensus
+//! implementation. Transactions now require Ed25519 authentication when using
+//! apply_signed_transfer; raw apply_transfer remains a low-level state helper.
 
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -20,6 +21,43 @@ pub struct Transaction {
     pub nonce: u64,
 }
 
+impl Transaction {
+    /// Stable signing payload: the serialized transaction fields in struct order.
+    pub fn signing_bytes(&self) -> Result<Vec<u8>, ProtocolError> {
+        serde_json::to_vec(self).map_err(|e| ProtocolError::Encoding(e.to_string()))
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedTransaction {
+    pub transaction: Transaction,
+    /// Hex-encoded 32-byte Ed25519 public key.
+    pub public_key: String,
+    /// Hex-encoded 64-byte Ed25519 signature over Transaction::signing_bytes().
+    pub signature: String,
+}
+
+impl SignedTransaction {
+    pub fn verify(&self) -> Result<(), ProtocolError> {
+        let public_key_bytes = decode_hex(&self.public_key)?;
+        let public_key_array: [u8; 32] = public_key_bytes
+            .try_into()
+            .map_err(|_| ProtocolError::InvalidPublicKey)?;
+        let verifying_key =
+            VerifyingKey::from_bytes(&public_key_array).map_err(|_| ProtocolError::InvalidPublicKey)?;
+        let signature_bytes = decode_hex(&self.signature)?;
+        let signature = Signature::from_slice(&signature_bytes)
+            .map_err(|_| ProtocolError::InvalidSignature)?;
+        let expected_address = address_from_public_key(&public_key_array);
+        if self.transaction.sender != expected_address {
+            return Err(ProtocolError::SignerAddressMismatch);
+        }
+        verifying_key
+            .verify(&self.transaction.signing_bytes()?, &signature)
+            .map_err(|_| ProtocolError::InvalidSignature)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Block {
     pub height: u64,
@@ -28,13 +66,11 @@ pub struct Block {
 }
 
 impl Block {
-    /// Hash a canonical JSON representation. BTreeMap is used for state maps;
-    /// block transaction order is preserved and therefore consensus-relevant.
+    /// Hash a deterministic serialized block. Transaction ordering is significant.
     pub fn hash(&self) -> Result<String, ProtocolError> {
-        let bytes = serde_json::to_vec(self)
-            .map_err(|e| ProtocolError::Encoding(e.to_string()))?;
-        let digest = Sha256::digest(bytes);
-        Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+        let bytes =
+            serde_json::to_vec(self).map_err(|e| ProtocolError::Encoding(e.to_string()))?;
+        Ok(hex_encode(&Sha256::digest(bytes)))
     }
 }
 
@@ -62,8 +98,16 @@ impl LedgerState {
         self.nonces.get(address).copied().unwrap_or_default()
     }
 
-    /// Apply one transfer atomically: all arithmetic and validation happen
-    /// before any state is mutated. This does not authenticate the sender yet.
+    pub fn apply_signed_transfer(
+        &mut self,
+        signed: &SignedTransaction,
+    ) -> Result<(), ProtocolError> {
+        signed.verify()?;
+        self.apply_transfer(&signed.transaction)
+    }
+
+    /// Low-level state transition. Network/API entry points must use the
+    /// signature-checking apply_signed_transfer method instead.
     pub fn apply_transfer(&mut self, tx: &Transaction) -> Result<(), ProtocolError> {
         if tx.sender.is_empty() || tx.recipient.is_empty() {
             return Err(ProtocolError::EmptyAddress);
@@ -93,9 +137,10 @@ impl LedgerState {
         Ok(())
     }
 
+    /// Applies a batch atomically. Callers must authenticate each transaction
+    /// before passing it to this low-level block method; signed block validation
+    /// will be wired into the node layer.
     pub fn apply_block(&mut self, block: &Block) -> Result<(), ProtocolError> {
-        // Apply to a clone so a later invalid transaction cannot partially
-        // mutate the caller's state.
         let mut candidate = self.clone();
         for tx in &block.transactions {
             candidate.apply_transfer(tx)?;
@@ -103,6 +148,24 @@ impl LedgerState {
         *self = candidate;
         Ok(())
     }
+}
+
+pub fn address_from_public_key(public_key: &[u8; 32]) -> Address {
+    format!("flr_{}", hex_encode(public_key))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn decode_hex(input: &str) -> Result<Vec<u8>, ProtocolError> {
+    if input.len() % 2 != 0 {
+        return Err(ProtocolError::InvalidHex);
+    }
+    (0..input.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&input[i..i + 2], 16).map_err(|_| ProtocolError::InvalidHex))
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,11 +177,34 @@ pub enum ProtocolError {
     AmountOverflow,
     NonceOverflow,
     Encoding(String),
+    InvalidHex,
+    InvalidPublicKey,
+    InvalidSignature,
+    SignerAddressMismatch,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    fn signed_transfer(nonce: u64, amount: u128, fee: u128) -> SignedTransaction {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let tx = Transaction {
+            sender: address_from_public_key(&public_key),
+            recipient: "flr_recipient".into(),
+            amount,
+            fee,
+            nonce,
+        };
+        let signature = signing_key.sign(&tx.signing_bytes().unwrap());
+        SignedTransaction {
+            transaction: tx,
+            public_key: hex_encode(&public_key),
+            signature: hex_encode(&signature.to_bytes()),
+        }
+    }
 
     fn transfer(nonce: u64, amount: u128, fee: u128) -> Transaction {
         Transaction {
@@ -131,22 +217,51 @@ mod tests {
     }
 
     #[test]
-    fn valid_transfer_moves_balance_and_collects_fee() {
-        let mut state = LedgerState::with_genesis([("alice".into(), 100), ("bob".into(), 5)]);
-        state.apply_transfer(&transfer(0, 30, 2)).unwrap();
-        assert_eq!(state.balance("alice"), 68);
-        assert_eq!(state.balance("bob"), 35);
+    fn valid_signed_transfer_moves_balance_and_collects_fee() {
+        let signed = signed_transfer(0, 30, 2);
+        let mut state = LedgerState::with_genesis([
+            (signed.transaction.sender.clone(), 100),
+            ("flr_recipient".into(), 5),
+        ]);
+        state.apply_signed_transfer(&signed).unwrap();
+        assert_eq!(state.balance(&signed.transaction.sender), 68);
+        assert_eq!(state.balance("flr_recipient"), 35);
         assert_eq!(state.total_fees, 2);
-        assert_eq!(state.next_nonce("alice"), 1);
+        assert_eq!(state.next_nonce(&signed.transaction.sender), 1);
+    }
+
+    #[test]
+    fn tampered_transaction_is_rejected_without_mutation() {
+        let mut signed = signed_transfer(0, 30, 2);
+        signed.transaction.amount = 31;
+        let mut state = LedgerState::with_genesis([(signed.transaction.sender.clone(), 100)]);
+        let before = state.clone();
+        assert_eq!(
+            state.apply_signed_transfer(&signed),
+            Err(ProtocolError::InvalidSignature)
+        );
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn signature_from_wrong_address_is_rejected() {
+        let mut signed = signed_transfer(0, 30, 2);
+        signed.transaction.sender = "flr_someone_else".into();
+        let mut state = LedgerState::with_genesis([("flr_someone_else".into(), 100)]);
+        assert_eq!(
+            state.apply_signed_transfer(&signed),
+            Err(ProtocolError::SignerAddressMismatch)
+        );
     }
 
     #[test]
     fn replayed_nonce_is_rejected_without_mutation() {
-        let mut state = LedgerState::with_genesis([("alice".into(), 100)]);
-        state.apply_transfer(&transfer(0, 10, 1)).unwrap();
+        let signed = signed_transfer(0, 10, 1);
+        let mut state = LedgerState::with_genesis([(signed.transaction.sender.clone(), 100)]);
+        state.apply_signed_transfer(&signed).unwrap();
         let before = state.clone();
         assert_eq!(
-            state.apply_transfer(&transfer(0, 10, 1)),
+            state.apply_signed_transfer(&signed),
             Err(ProtocolError::BadNonce { expected: 1, got: 0 })
         );
         assert_eq!(state, before);
