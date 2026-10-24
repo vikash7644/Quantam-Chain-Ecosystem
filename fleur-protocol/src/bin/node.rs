@@ -1,0 +1,131 @@
+use axum::{
+    extract::State,
+    routing::post,
+    Json, Router,
+};
+use fleur_protocol::{Block, LedgerState, PersistentChain, SignedTransaction};
+use serde_json::{json, Value};
+use std::{
+    env,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
+type SharedChain = Arc<Mutex<PersistentChain>>;
+
+#[tokio::main]
+async fn main() {
+    let journal_path = env::var_os("FLEUR_JOURNAL")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("./data/fleur-chain.jsonl"));
+    let genesis_address = env::var("FLEUR_GENESIS_ADDRESS").unwrap_or_default();
+    let genesis_balance = env::var("FLEUR_GENESIS_BALANCE")
+        .ok()
+        .and_then(|value| value.parse::<u128>().ok())
+        .unwrap_or_default();
+    let genesis = if genesis_address.is_empty() {
+        LedgerState::default()
+    } else {
+        LedgerState::with_genesis([(genesis_address, genesis_balance)])
+    };
+    let chain = PersistentChain::open(&journal_path, genesis, "FLEUR_GENESIS_V1")
+        .expect("journal must replay successfully");
+    let shared = Arc::new(Mutex::new(chain));
+
+    let app = Router::new()
+        .route("/rpc", post(handle_rpc))
+        .with_state(shared);
+    let address: SocketAddr = env::var("FLEUR_RPC_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:8545".to_string())
+        .parse()
+        .expect("FLEUR_RPC_ADDR must be a socket address");
+
+    let listener = tokio::net::TcpListener::bind(address)
+        .await
+        .expect("bind Fleur RPC listener");
+    println!("Fleur single-node dev RPC listening at http://{address}/rpc");
+    println!("This is a development endpoint; consensus and EVM execution are not implemented.");
+    axum::serve(listener, app).await.expect("serve Fleur RPC");
+}
+
+async fn handle_rpc(
+    State(chain): State<SharedChain>,
+    Json(request): Json<Value>,
+) -> Json<Value> {
+    let id = request.get("id").cloned().unwrap_or(Value::Null);
+    if request.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return rpc_error(id, -32600, "Invalid JSON-RPC request");
+    }
+    let Some(method) = request.get("method").and_then(Value::as_str) else {
+        return rpc_error(id, -32600, "Missing method");
+    };
+    let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
+
+    match method {
+        "fleur_chainStatus" => {
+            let Ok(chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "height": chain.chain.tip_height,
+                    "blockHash": chain.chain.tip_hash,
+                    "totalFees": chain.chain.ledger.total_fees.to_string()
+                }
+            }))
+        }
+        "fleur_getBalance" => {
+            let Some(address) = params.get("address").and_then(Value::as_str) else {
+                return rpc_error(id, -32602, "params.address must be a string");
+            };
+            let Ok(chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": { "address": address, "balance": chain.chain.ledger.balance(address).to_string() }
+            }))
+        }
+        "fleur_submitTransaction" => {
+            let Some(value) = params.get("signedTransaction").cloned() else {
+                return rpc_error(id, -32602, "params.signedTransaction is required");
+            };
+            let signed: SignedTransaction = match serde_json::from_value(value) {
+                Ok(transaction) => transaction,
+                Err(_) => return rpc_error(id, -32602, "Invalid signed transaction shape"),
+            };
+            let Ok(mut chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            let Some(height) = chain.chain.tip_height.checked_add(1) else {
+                return rpc_error(id, -32000, "Block height overflow");
+            };
+            let block = Block {
+                height,
+                previous_hash: chain.chain.tip_hash.clone(),
+                transactions: vec![signed],
+            };
+            match chain.append_block(&block) {
+                Ok(hash) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "height": height, "blockHash": hash }
+                })),
+                Err(error) => rpc_error(id, -32000, &format!("{error:?}")),
+            }
+        }
+        _ => rpc_error(id, -32601, "Method not found"),
+    }
+}
+
+fn rpc_error(id: Value, code: i64, message: &str) -> Json<Value> {
+    Json(json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message }
+    }))
+}
