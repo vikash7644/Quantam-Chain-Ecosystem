@@ -159,6 +159,48 @@ impl LedgerState {
     }
 }
 
+/// Validates block height and parent linkage before advancing the local chain tip.
+/// This is deterministic single-node chain validation, not distributed consensus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Blockchain {
+    pub ledger: LedgerState,
+    pub tip_height: u64,
+    pub tip_hash: String,
+}
+
+impl Blockchain {
+    pub fn new(genesis_state: LedgerState, genesis_hash: impl Into<String>) -> Self {
+        Self {
+            ledger: genesis_state,
+            tip_height: 0,
+            tip_hash: genesis_hash.into(),
+        }
+    }
+
+    pub fn apply_block(&mut self, block: &Block) -> Result<String, ProtocolError> {
+        let expected_height = self
+            .tip_height
+            .checked_add(1)
+            .ok_or(ProtocolError::BlockHeightOverflow)?;
+        if block.height != expected_height {
+            return Err(ProtocolError::BadBlockHeight {
+                expected: expected_height,
+                got: block.height,
+            });
+        }
+        if block.previous_hash != self.tip_hash {
+            return Err(ProtocolError::BadParentHash);
+        }
+        let block_hash = block.hash()?;
+        let mut next_ledger = self.ledger.clone();
+        next_ledger.apply_block(block)?;
+        self.ledger = next_ledger;
+        self.tip_height = block.height;
+        self.tip_hash = block_hash.clone();
+        Ok(block_hash)
+    }
+}
+
 pub fn address_from_public_key(public_key: &[u8; 32]) -> Address {
     format!("flr_{}", hex_encode(public_key))
 }
@@ -192,6 +234,9 @@ pub enum ProtocolError {
     InvalidPublicKey,
     InvalidSignature,
     SignerAddressMismatch,
+    BadBlockHeight { expected: u64, got: u64 },
+    BadParentHash,
+    BlockHeightOverflow,
 }
 
 #[cfg(test)]
@@ -306,6 +351,38 @@ mod tests {
         };
         assert_eq!(block.hash().unwrap(), block.hash().unwrap());
         assert_eq!(block.hash().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn blockchain_rejects_wrong_parent_and_keeps_tip_unchanged() {
+        let signed = signed_transfer(0, 7, 1);
+        let sender = signed.transaction.sender.clone();
+        let ledger = LedgerState::with_genesis([(sender, 100)]);
+        let mut chain = Blockchain::new(ledger, "genesis");
+        let block = Block {
+            height: 1,
+            previous_hash: "wrong-parent".into(),
+            transactions: vec![signed],
+        };
+        let before = chain.clone();
+        assert_eq!(chain.apply_block(&block), Err(ProtocolError::BadParentHash));
+        assert_eq!(chain, before);
+    }
+
+    #[test]
+    fn blockchain_advances_tip_after_valid_block() {
+        let signed = signed_transfer(0, 7, 1);
+        let sender = signed.transaction.sender.clone();
+        let ledger = LedgerState::with_genesis([(sender, 100)]);
+        let mut chain = Blockchain::new(ledger, "genesis");
+        let block = Block {
+            height: 1,
+            previous_hash: "genesis".into(),
+            transactions: vec![signed],
+        };
+        let hash = chain.apply_block(&block).unwrap();
+        assert_eq!(chain.tip_height, 1);
+        assert_eq!(chain.tip_hash, hash);
     }
 
     #[test]
