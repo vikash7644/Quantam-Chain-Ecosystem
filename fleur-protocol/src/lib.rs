@@ -121,13 +121,25 @@ impl LedgerState {
                 got: tx.nonce,
             });
         }
-        let total = tx.amount.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
+        let total = tx
+            .amount
+            .checked_add(tx.fee)
+            .ok_or(ProtocolError::AmountOverflow)?;
         let sender_balance = self.balance(&tx.sender);
         let recipient_balance = self.balance(&tx.recipient);
-        let new_sender = sender_balance.checked_sub(total).ok_or(ProtocolError::InsufficientFunds)?;
-        let new_recipient = recipient_balance.checked_add(tx.amount).ok_or(ProtocolError::AmountOverflow)?;
-        let new_fees = self.total_fees.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
-        let next_nonce = expected_nonce.checked_add(1).ok_or(ProtocolError::NonceOverflow)?;
+        let new_sender = sender_balance
+            .checked_sub(total)
+            .ok_or(ProtocolError::InsufficientFunds)?;
+        let new_recipient = recipient_balance
+            .checked_add(tx.amount)
+            .ok_or(ProtocolError::AmountOverflow)?;
+        let new_fees = self
+            .total_fees
+            .checked_add(tx.fee)
+            .ok_or(ProtocolError::AmountOverflow)?;
+        let next_nonce = expected_nonce
+            .checked_add(1)
+            .ok_or(ProtocolError::NonceOverflow)?;
 
         self.balances.insert(tx.sender.clone(), new_sender);
         self.balances.insert(tx.recipient.clone(), new_recipient);
@@ -307,7 +319,10 @@ mod tests {
         let before = state.clone();
         assert_eq!(
             state.apply_signed_transfer(&signed),
-            Err(ProtocolError::BadNonce { expected: 1, got: 0 })
+            Err(ProtocolError::BadNonce {
+                expected: 1,
+                got: 0,
+            })
         );
         assert_eq!(state, before);
     }
@@ -324,7 +339,10 @@ mod tests {
             transactions: vec![first, second],
         };
         let before = state.clone();
-        assert_eq!(state.apply_block(&block), Err(ProtocolError::InsufficientFunds));
+        assert_eq!(
+            state.apply_block(&block),
+            Err(ProtocolError::InsufficientFunds)
+        );
         assert_eq!(state, before);
     }
 
@@ -376,7 +394,10 @@ mod tests {
         let mut state = LedgerState::with_genesis([("alice".into(), u128::MAX)]);
         let before = state.clone();
         let tx = transfer(0, u128::MAX, 1);
-        assert_eq!(state.apply_transfer(&tx), Err(ProtocolError::AmountOverflow));
+        assert_eq!(
+            state.apply_transfer(&tx),
+            Err(ProtocolError::AmountOverflow)
+        );
         assert_eq!(state, before);
     }
 }
