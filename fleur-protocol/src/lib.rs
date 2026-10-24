@@ -231,16 +231,18 @@ impl PersistentChain {
             if line.trim().is_empty() {
                 continue;
             }
-            let block: Block = serde_json::from_str(line).map_err(|error| {
-                ProtocolError::InvalidJournal {
+            let block: Block =
+                serde_json::from_str(line).map_err(|error| ProtocolError::InvalidJournal {
                     line: line_index + 1,
                     message: error.to_string(),
-                }
-            })?;
+                })?;
             chain.apply_block(&block)?;
         }
 
-        Ok(Self { chain, journal_path })
+        Ok(Self {
+            chain,
+            journal_path,
+        })
     }
 
     /// Validate against a cloned chain first, append and sync the block, then
@@ -255,8 +257,8 @@ impl PersistentChain {
         {
             fs::create_dir_all(parent).map_err(|error| ProtocolError::Io(error.to_string()))?;
         }
-        let encoded =
-            serde_json::to_string(block).map_err(|error| ProtocolError::Encoding(error.to_string()))?;
+        let encoded = serde_json::to_string(block)
+            .map_err(|error| ProtocolError::Encoding(error.to_string()))?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -459,10 +461,8 @@ mod tests {
 
     #[test]
     fn persistent_journal_replays_validated_chain_state() {
-        let path = std::env::temp_dir().join(format!(
-            "fleur-chain-journal-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fleur-chain-journal-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let signed = signed_transfer(0, 17, 2);
         let sender = signed.transaction.sender.clone();
@@ -473,8 +473,7 @@ mod tests {
             transactions: vec![signed],
         };
         {
-            let mut persistent =
-                PersistentChain::open(&path, genesis.clone(), "genesis").unwrap();
+            let mut persistent = PersistentChain::open(&path, genesis.clone(), "genesis").unwrap();
             persistent.append_block(&block).unwrap();
             assert_eq!(persistent.chain.ledger.balance(&sender), 81);
         }
