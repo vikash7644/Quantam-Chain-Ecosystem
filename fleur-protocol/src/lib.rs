@@ -8,6 +8,9 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 pub type Address = String;
 pub type Amount = u128;
@@ -202,6 +205,71 @@ impl Blockchain {
     }
 }
 
+/// Append-only block journal. Opening a journal replays and validates every
+/// block from the supplied genesis state. This is a local persistence layer,
+/// not a database or a distributed consensus mechanism.
+pub struct PersistentChain {
+    pub chain: Blockchain,
+    journal_path: PathBuf,
+}
+
+impl PersistentChain {
+    pub fn open(
+        journal_path: impl AsRef<Path>,
+        genesis_state: LedgerState,
+        genesis_hash: impl Into<String>,
+    ) -> Result<Self, ProtocolError> {
+        let journal_path = journal_path.as_ref().to_path_buf();
+        let mut chain = Blockchain::new(genesis_state, genesis_hash);
+        let journal = match fs::read_to_string(&journal_path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(ProtocolError::Io(error.to_string())),
+        };
+
+        for (line_index, line) in journal.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let block: Block = serde_json::from_str(line).map_err(|error| {
+                ProtocolError::InvalidJournal {
+                    line: line_index + 1,
+                    message: error.to_string(),
+                }
+            })?;
+            chain.apply_block(&block)?;
+        }
+
+        Ok(Self { chain, journal_path })
+    }
+
+    /// Validate against a cloned chain first, append and sync the block, then
+    /// publish the new in-memory tip. A rejected block never reaches the journal.
+    pub fn append_block(&mut self, block: &Block) -> Result<String, ProtocolError> {
+        let mut next_chain = self.chain.clone();
+        let hash = next_chain.apply_block(block)?;
+        if let Some(parent) = self
+            .journal_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent).map_err(|error| ProtocolError::Io(error.to_string()))?;
+        }
+        let encoded =
+            serde_json::to_string(block).map_err(|error| ProtocolError::Encoding(error.to_string()))?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.journal_path)
+            .map_err(|error| ProtocolError::Io(error.to_string()))?;
+        writeln!(file, "{encoded}").map_err(|error| ProtocolError::Io(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| ProtocolError::Io(error.to_string()))?;
+        self.chain = next_chain;
+        Ok(hash)
+    }
+}
+
 pub fn address_from_public_key(public_key: &[u8; 32]) -> Address {
     format!("flr_{}", hex_encode(public_key))
 }
@@ -236,6 +304,8 @@ pub enum ProtocolError {
     BadBlockHeight { expected: u64, got: u64 },
     BadParentHash,
     BlockHeightOverflow,
+    Io(String),
+    InvalidJournal { line: usize, message: String },
 }
 
 #[cfg(test)]
@@ -385,6 +455,34 @@ mod tests {
         let hash = chain.apply_block(&block).unwrap();
         assert_eq!(chain.tip_height, 1);
         assert_eq!(chain.tip_hash, hash);
+    }
+
+    #[test]
+    fn persistent_journal_replays_validated_chain_state() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-chain-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let signed = signed_transfer(0, 17, 2);
+        let sender = signed.transaction.sender.clone();
+        let genesis = LedgerState::with_genesis([(sender.clone(), 100)]);
+        let block = Block {
+            height: 1,
+            previous_hash: "genesis".into(),
+            transactions: vec![signed],
+        };
+        {
+            let mut persistent =
+                PersistentChain::open(&path, genesis.clone(), "genesis").unwrap();
+            persistent.append_block(&block).unwrap();
+            assert_eq!(persistent.chain.ledger.balance(&sender), 81);
+        }
+        let reopened = PersistentChain::open(&path, genesis, "genesis").unwrap();
+        assert_eq!(reopened.chain.tip_height, 1);
+        assert_eq!(reopened.chain.ledger.balance(&sender), 81);
+        assert_eq!(reopened.chain.ledger.total_fees, 2);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
