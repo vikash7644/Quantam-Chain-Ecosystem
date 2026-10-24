@@ -283,9 +283,10 @@ mod tests {
 
     #[test]
     fn invalid_late_transaction_rolls_back_entire_block() {
-        let mut state = LedgerState::with_genesis([("alice".into(), 100)]);
         let first = signed_transfer(0, 10, 1);
+        let sender = first.transaction.sender.clone();
         let second = signed_transfer(1, 10_000, 1);
+        let mut state = LedgerState::with_genesis([(sender, 100)]);
         let block = Block {
             height: 1,
             previous_hash: "genesis".into(),
