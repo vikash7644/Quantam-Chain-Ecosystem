@@ -46,8 +46,8 @@ impl SignedTransaction {
         let verifying_key = VerifyingKey::from_bytes(&public_key_array)
             .map_err(|_| ProtocolError::InvalidPublicKey)?;
         let signature_bytes = decode_hex(&self.signature)?;
-        let signature = Signature::from_slice(&signature_bytes)
-            .map_err(|_| ProtocolError::InvalidSignature)?;
+        let signature =
+            Signature::from_slice(&signature_bytes).map_err(|_| ProtocolError::InvalidSignature)?;
         let expected_address = address_from_public_key(&public_key_array);
         if self.transaction.sender != expected_address {
             return Err(ProtocolError::SignerAddressMismatch);
@@ -68,8 +68,7 @@ pub struct Block {
 impl Block {
     /// Hash a deterministic serialized block. Transaction ordering is significant.
     pub fn hash(&self) -> Result<String, ProtocolError> {
-        let bytes =
-            serde_json::to_vec(self).map_err(|e| ProtocolError::Encoding(e.to_string()))?;
+        let bytes = serde_json::to_vec(self).map_err(|e| ProtocolError::Encoding(e.to_string()))?;
         Ok(hex_encode(&Sha256::digest(bytes)))
     }
 }
@@ -122,22 +121,12 @@ impl LedgerState {
                 got: tx.nonce,
             });
         }
-        let total = tx
-            .amount
-            .checked_add(tx.fee)
-            .ok_or(ProtocolError::AmountOverflow)?;
+        let total = tx.amount.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
         let sender_balance = self.balance(&tx.sender);
         let recipient_balance = self.balance(&tx.recipient);
-        let new_sender = sender_balance
-            .checked_sub(total)
-            .ok_or(ProtocolError::InsufficientFunds)?;
-        let new_recipient = recipient_balance
-            .checked_add(tx.amount)
-            .ok_or(ProtocolError::AmountOverflow)?;
-        let new_fees = self
-            .total_fees
-            .checked_add(tx.fee)
-            .ok_or(ProtocolError::AmountOverflow)?;
+        let new_sender = sender_balance.checked_sub(total).ok_or(ProtocolError::InsufficientFunds)?;
+        let new_recipient = recipient_balance.checked_add(tx.amount).ok_or(ProtocolError::AmountOverflow)?;
+        let new_fees = self.total_fees.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
         let next_nonce = expected_nonce.checked_add(1).ok_or(ProtocolError::NonceOverflow)?;
 
         self.balances.insert(tx.sender.clone(), new_sender);
@@ -318,10 +307,7 @@ mod tests {
         let before = state.clone();
         assert_eq!(
             state.apply_signed_transfer(&signed),
-            Err(ProtocolError::BadNonce {
-                expected: 1,
-                got: 0,
-            })
+            Err(ProtocolError::BadNonce { expected: 1, got: 0 })
         );
         assert_eq!(state, before);
     }
