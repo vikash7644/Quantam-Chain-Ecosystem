@@ -32,6 +32,9 @@ cd fleur-protocol
 cargo fmt --all -- --check
 cargo test --all-targets
 cargo run --release
+
+# In another terminal, start the single-node JSON-RPC server
+cargo run --release --bin node
 ```
 
 ## Ten-day target
@@ -40,7 +43,7 @@ cargo run --release
 2. ~~Signed transaction envelope and key verification~~ (implemented in the local protocol crate; CI still needs to verify).
 3. ~~Local block height and parent continuity~~ (implemented; distributed consensus remains pending).
 4. ~~Append-only block journal and deterministic replay~~ (implemented; production storage hardening remains).
-5. Node API and local devnet configuration.
+5. ~~Single-node JSON-RPC API~~ (implemented; production networking remains).
 6. EVM execution design and compatibility tests.
 7. Solidity contract deploy/call path (scoped to achievable MVP).
 8. Multi-node sync and adversarial tests.
