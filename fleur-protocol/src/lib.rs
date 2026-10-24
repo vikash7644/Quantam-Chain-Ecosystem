@@ -216,9 +216,7 @@ fn decode_hex(input: &str) -> Result<Vec<u8>, ProtocolError> {
     }
     (0..input.len())
         .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&input[i..i + 2], 16).map_err(|_| ProtocolError::InvalidHex)
-        })
+        .map(|i| u8::from_str_radix(&input[i..i + 2], 16).map_err(|_| ProtocolError::InvalidHex))
         .collect()
 }
 
