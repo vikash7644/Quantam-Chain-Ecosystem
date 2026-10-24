@@ -153,6 +153,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn submit_transaction_rpc_verifies_and_persists_signed_transfer() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let path = std::env::temp_dir().join(format!(
+            "fleur-rpc-submit-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let signing_key = SigningKey::from_bytes(&[11u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = fleur_protocol::address_from_public_key(&public_key);
+        let recipient = "flr_rpc_recipient".to_string();
+        let ledger = LedgerState::with_genesis([(sender.clone(), 100)]);
+        let chain = PersistentChain::open(&path, ledger, "FLEUR_GENESIS_V1").unwrap();
+        let shared = Arc::new(Mutex::new(chain));
+        let transaction = fleur_protocol::Transaction {
+            sender: sender.clone(),
+            recipient: recipient.clone(),
+            amount: 10,
+            fee: 1,
+            nonce: 0,
+        };
+        let signature = signing_key.sign(&transaction.signing_bytes().unwrap());
+        let signed = SignedTransaction {
+            transaction,
+            public_key: hex_encode(&public_key),
+            signature: hex_encode(&signature.to_bytes()),
+        };
+
+        let response = handle_rpc(
+            State(shared.clone()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "fleur_submitTransaction",
+                "params": { "signedTransaction": signed }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["height"], 1);
+        {
+            let chain = shared.lock().unwrap();
+            assert_eq!(chain.chain.ledger.balance(&sender), 89);
+            assert_eq!(chain.chain.ledger.balance(&recipient), 10);
+            assert_eq!(chain.chain.ledger.total_fees, 1);
+        }
+        drop(shared);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
     async fn unknown_rpc_method_returns_method_not_found() {
         let response = handle_rpc(
             State(test_chain()),
