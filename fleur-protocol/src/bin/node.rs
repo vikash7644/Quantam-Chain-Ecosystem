@@ -122,3 +122,50 @@ fn rpc_error(id: Value, code: i64, message: &str) -> Json<Value> {
         "error": { "code": code, "message": message }
     }))
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_chain() -> SharedChain {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-rpc-test-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let chain = PersistentChain::open(&path, LedgerState::default(), "FLEUR_GENESIS_V1")
+            .expect("open test journal");
+        Arc::new(Mutex::new(chain))
+    }
+
+    #[tokio::test]
+    async fn chain_status_rpc_returns_genesis_tip() {
+        let chain = test_chain();
+        let response = handle_rpc(
+            State(chain),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "fleur_chainStatus"
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["height"], 0);
+        assert_eq!(response.0["result"]["blockHash"], "FLEUR_GENESIS_V1");
+    }
+
+    #[tokio::test]
+    async fn unknown_rpc_method_returns_method_not_found() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "fleur_unknownMethod"
+            })),
+        )
+        .await;
+        assert_eq!(response.0["error"]["code"], -32601);
+    }
+}
