@@ -123,16 +123,13 @@ fn rpc_error(id: Value, code: i64, message: &str) -> Json<Value> {
     }))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn test_chain() -> SharedChain {
-        let path = std::env::temp_dir().join(format!(
-            "fleur-rpc-test-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fleur-rpc-test-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let chain = PersistentChain::open(&path, LedgerState::default(), "FLEUR_GENESIS_V1")
             .expect("open test journal");
