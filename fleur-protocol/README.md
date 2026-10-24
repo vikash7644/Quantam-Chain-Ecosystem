@@ -18,8 +18,8 @@ target is Solidity/EVM compatibility only.
 
 This slice is **not** a public testnet. The local signed-transfer path verifies
 Ed25519 signatures, but block height/parent continuity is checked locally, but no distributed consensus exists;
-there is no consensus or peer-to-peer networking, and persistent storage,
-RPC, and EVM execution are not implemented. The CLI uses a deterministic demo
+there is no consensus or peer-to-peer networking, and the JSONL journal is only an MVP persistence layer; production-grade database
+recovery, RPC, and EVM execution are not implemented. The CLI uses a deterministic demo
 private key and must never be used with real funds. Do not use real funds or expose this as a
 production node.
 
@@ -39,7 +39,7 @@ cargo run --release
 1. Protocol rules and reproducible build.
 2. ~~Signed transaction envelope and key verification~~ (implemented in the local protocol crate; CI still needs to verify).
 3. ~~Local block height and parent continuity~~ (implemented; distributed consensus remains pending).
-4. Persistent state and deterministic replay.
+4. ~~Append-only block journal and deterministic replay~~ (implemented; production storage hardening remains).
 5. Node API and local devnet configuration.
 6. EVM execution design and compatibility tests.
 7. Solidity contract deploy/call path (scoped to achievable MVP).
