@@ -43,8 +43,8 @@ impl SignedTransaction {
         let public_key_array: [u8; 32] = public_key_bytes
             .try_into()
             .map_err(|_| ProtocolError::InvalidPublicKey)?;
-        let verifying_key =
-            VerifyingKey::from_bytes(&public_key_array).map_err(|_| ProtocolError::InvalidPublicKey)?;
+        let verifying_key = VerifyingKey::from_bytes(&public_key_array)
+            .map_err(|_| ProtocolError::InvalidPublicKey)?;
         let signature_bytes = decode_hex(&self.signature)?;
         let signature = Signature::from_slice(&signature_bytes)
             .map_err(|_| ProtocolError::InvalidSignature)?;
@@ -122,12 +122,22 @@ impl LedgerState {
                 got: tx.nonce,
             });
         }
-        let total = tx.amount.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
+        let total = tx
+            .amount
+            .checked_add(tx.fee)
+            .ok_or(ProtocolError::AmountOverflow)?;
         let sender_balance = self.balance(&tx.sender);
         let recipient_balance = self.balance(&tx.recipient);
-        let new_sender = sender_balance.checked_sub(total).ok_or(ProtocolError::InsufficientFunds)?;
-        let new_recipient = recipient_balance.checked_add(tx.amount).ok_or(ProtocolError::AmountOverflow)?;
-        let new_fees = self.total_fees.checked_add(tx.fee).ok_or(ProtocolError::AmountOverflow)?;
+        let new_sender = sender_balance
+            .checked_sub(total)
+            .ok_or(ProtocolError::InsufficientFunds)?;
+        let new_recipient = recipient_balance
+            .checked_add(tx.amount)
+            .ok_or(ProtocolError::AmountOverflow)?;
+        let new_fees = self
+            .total_fees
+            .checked_add(tx.fee)
+            .ok_or(ProtocolError::AmountOverflow)?;
         let next_nonce = expected_nonce.checked_add(1).ok_or(ProtocolError::NonceOverflow)?;
 
         self.balances.insert(tx.sender.clone(), new_sender);
@@ -163,7 +173,9 @@ fn decode_hex(input: &str) -> Result<Vec<u8>, ProtocolError> {
     }
     (0..input.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&input[i..i + 2], 16).map_err(|_| ProtocolError::InvalidHex))
+        .map(|i| {
+            u8::from_str_radix(&input[i..i + 2], 16).map_err(|_| ProtocolError::InvalidHex)
+        })
         .collect()
 }
 
@@ -261,7 +273,10 @@ mod tests {
         let before = state.clone();
         assert_eq!(
             state.apply_signed_transfer(&signed),
-            Err(ProtocolError::BadNonce { expected: 1, got: 0 })
+            Err(ProtocolError::BadNonce {
+                expected: 1,
+                got: 0,
+            })
         );
         assert_eq!(state, before);
     }
