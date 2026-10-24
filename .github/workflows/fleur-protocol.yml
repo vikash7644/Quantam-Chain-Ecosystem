@@ -25,7 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - name: Format check
         run: cargo fmt --all -- --check
       - name: Unit tests
