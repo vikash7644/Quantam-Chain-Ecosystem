@@ -32,7 +32,9 @@ fn main() {
         previous_hash: "GENESIS".into(),
         transactions: vec![signed_tx],
     };
-    state.apply_block(&block).expect("signed demo block should be valid");
+    state
+        .apply_block(&block)
+        .expect("signed demo block should be valid");
 
     println!("Fleur Network protocol scaffold");
     println!("height: {}", block.height);
