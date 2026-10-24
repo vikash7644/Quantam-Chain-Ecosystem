@@ -156,10 +156,8 @@ mod tests {
     async fn submit_transaction_rpc_verifies_and_persists_signed_transfer() {
         use ed25519_dalek::{Signer, SigningKey};
 
-        let path = std::env::temp_dir().join(format!(
-            "fleur-rpc-submit-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fleur-rpc-submit-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let signing_key = SigningKey::from_bytes(&[11u8; 32]);
         let public_key = signing_key.verifying_key().to_bytes();
