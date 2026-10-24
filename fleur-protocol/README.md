@@ -17,7 +17,7 @@ target is Solidity/EVM compatibility only.
 ## Explicitly not testnet-ready yet
 
 This slice is **not** a public testnet. The local signed-transfer path verifies
-Ed25519 signatures, but block height/parent continuity is not yet enforced;
+Ed25519 signatures, but block height/parent continuity is checked locally, but no distributed consensus exists;
 there is no consensus or peer-to-peer networking, and persistent storage,
 RPC, and EVM execution are not implemented. The CLI uses a deterministic demo
 private key and must never be used with real funds. Do not use real funds or expose this as a
@@ -38,7 +38,7 @@ cargo run --release
 
 1. Protocol rules and reproducible build.
 2. ~~Signed transaction envelope and key verification~~ (implemented in the local protocol crate; CI still needs to verify).
-3. Block validation and chain continuity.
+3. ~~Local block height and parent continuity~~ (implemented; distributed consensus remains pending).
 4. Persistent state and deterministic replay.
 5. Node API and local devnet configuration.
 6. EVM execution design and compatibility tests.
