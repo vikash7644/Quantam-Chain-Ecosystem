@@ -208,6 +208,16 @@ mod tests {
             assert_eq!(chain.chain.ledger.total_fees, 1);
         }
         drop(shared);
+        let replayed = PersistentChain::open(
+            &path,
+            LedgerState::with_genesis([(sender.clone(), 100)]),
+            "FLEUR_GENESIS_V1",
+        )
+        .expect("reopen journal and replay signed transfer");
+        assert_eq!(replayed.chain.tip_height, 1);
+        assert_eq!(replayed.chain.ledger.balance(&sender), 89);
+        assert_eq!(replayed.chain.ledger.balance(&recipient), 10);
+        assert_eq!(replayed.chain.ledger.total_fees, 1);
         let _ = std::fs::remove_file(&path);
     }
 
