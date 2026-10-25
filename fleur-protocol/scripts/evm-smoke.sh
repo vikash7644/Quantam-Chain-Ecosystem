@@ -59,5 +59,5 @@ if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
-echo "Fleur JSON-RPC EVM sandbox smoke test passed (return value 42)."
-echo "Note: this checks the isolated in-memory sandbox, not persistent EVM state."
+echo "Fleur persistent EVM JSON-RPC smoke test passed (return value 42)."
+echo "Note: commands replay from a separate EVM journal; they are not yet block-committed."
