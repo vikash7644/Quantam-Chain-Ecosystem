@@ -240,9 +240,7 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                         output: Output::Create(_, Some(address)),
                         ..
                     } => address,
-                    other => {
-                        return Err(format!("contract deployment did not succeed: {other:?}"))
-                    }
+                    other => return Err(format!("contract deployment did not succeed: {other:?}")),
                 };
                 nonce = nonce
                     .checked_add(1)
@@ -250,10 +248,9 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                 (address, gas_used)
             }
             EvmOperationKind::CallExisting => {
-                let address = operation
-                    .contract_address
-                    .as_deref()
-                    .ok_or_else(|| "existing-contract call requires contract address".to_string())?;
+                let address = operation.contract_address.as_deref().ok_or_else(|| {
+                    "existing-contract call requires contract address".to_string()
+                })?;
                 (parse_address(address)?, 0)
             }
         };
@@ -434,8 +431,10 @@ mod tests {
 
     #[test]
     fn persistent_journal_can_call_an_existing_contract() {
-        let path = std::env::temp_dir()
-            .join(format!("fleur-evm-call-existing-{}.jsonl", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-call-existing-{}.jsonl",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&path);
         let init_code = vec![
             0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
@@ -444,12 +443,8 @@ mod tests {
 
         let deployed =
             persistent_deploy_and_call(&path, init_code, Vec::new()).expect("deploy contract");
-        let called = persistent_call_contract(
-            &path,
-            deployed.contract_address.clone(),
-            Vec::new(),
-        )
-        .expect("call existing contract through replayed EVM state");
+        let called = persistent_call_contract(&path, deployed.contract_address.clone(), Vec::new())
+            .expect("call existing contract through replayed EVM state");
 
         assert_eq!(called.contract_address, deployed.contract_address);
         assert_eq!(called.return_data, format!("{:064x}", 42));
