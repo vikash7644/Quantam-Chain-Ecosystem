@@ -77,6 +77,126 @@ pub fn deploy_and_call(
     }
 }
 
+/// One accepted EVM command stored in the replay journal.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct EvmOperation {
+    init_code: Vec<u8>,
+    call_data: Vec<u8>,
+}
+
+/// Execute and append a deployment/call operation to a deterministic command journal.
+///
+/// The journal stores commands, not a serialized database snapshot. Each request
+/// replays all prior operations in order, then appends the new operation only after
+/// successful execution. This is an MVP persistence bridge; it is not yet part of
+/// Fleur block validation or ledger gas settlement.
+pub fn persistent_deploy_and_call(
+    journal_path: impl AsRef<std::path::Path>,
+    init_code: Vec<u8>,
+    call_data: Vec<u8>,
+) -> Result<EvmExecutionReport, String> {
+    use std::io::Write;
+
+    let path = journal_path.as_ref();
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(format!("cannot read EVM journal: {error}")),
+    };
+    let mut operations = Vec::new();
+    for (index, line) in contents.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let operation: EvmOperation = serde_json::from_str(line)
+            .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
+        if operation.init_code.is_empty() {
+            return Err(format!("invalid EVM journal line {}: empty init code", index + 1));
+        }
+        operations.push(operation);
+    }
+
+    let operation = EvmOperation { init_code, call_data };
+    if operation.init_code.is_empty() {
+        return Err("init code must not be empty".to_string());
+    }
+    let mut candidate = operations.clone();
+    candidate.push(operation.clone());
+    let reports = execute_operations(&candidate)?;
+    let report = reports.last().cloned().ok_or_else(|| "EVM journal produced no report".to_string())?;
+
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("cannot create EVM journal directory: {error}"))?;
+    }
+    let encoded = serde_json::to_string(&operation)
+        .map_err(|error| format!("cannot encode EVM operation: {error}"))?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("cannot open EVM journal: {error}"))?;
+    writeln!(file, "{encoded}").map_err(|error| format!("cannot append EVM journal: {error}"))?;
+    file.sync_all().map_err(|error| format!("cannot sync EVM journal: {error}"))?;
+    Ok(report)
+}
+
+fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionReport>, String> {
+    let context = Context::mainnet().with_db(CacheDB::<EmptyDB>::default());
+    let mut evm = context.build_mainnet();
+    let mut nonce = 0u64;
+    let mut reports = Vec::with_capacity(operations.len());
+
+    for operation in operations {
+        let creation = evm
+            .transact_commit(
+                TxEnv::builder()
+                    .kind(TxKind::Create)
+                    .data(Bytes::from(operation.init_code.clone()))
+                    .nonce(nonce)
+                    .build()
+                    .map_err(|error| format!("invalid create transaction: {error:?}"))?,
+            )
+            .map_err(|error| format!("contract deployment failed: {error:?}"))?;
+        let deployment_gas_used = creation.gas_used();
+        let contract_address = match creation {
+            ExecutionResult::Success {
+                output: Output::Create(_, Some(address)),
+                ..
+            } => address,
+            other => return Err(format!("contract deployment did not succeed: {other:?}")),
+        };
+        nonce = nonce.checked_add(1).ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
+
+        let call = evm
+            .transact_commit(
+                TxEnv::builder()
+                    .kind(TxKind::Call(contract_address))
+                    .data(Bytes::from(operation.call_data.clone()))
+                    .nonce(nonce)
+                    .build()
+                    .map_err(|error| format!("invalid call transaction: {error:?}"))?,
+            )
+            .map_err(|error| format!("contract call failed: {error:?}"))?;
+        let call_gas_used = call.gas_used();
+        let return_data = match call {
+            ExecutionResult::Success {
+                output: Output::Call(output),
+                ..
+            } => hex_encode(&output),
+            other => return Err(format!("contract call did not succeed: {other:?}")),
+        };
+        nonce = nonce.checked_add(1).ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
+        reports.push(EvmExecutionReport {
+            contract_address: format!("{contract_address:#x}"),
+            deployment_gas_used,
+            call_gas_used,
+            return_data,
+        });
+    }
+    Ok(reports)
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     let mut encoded = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
