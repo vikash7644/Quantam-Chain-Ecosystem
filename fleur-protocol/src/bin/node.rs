@@ -1,4 +1,8 @@
-use axum::{extract::State, routing::{get, post}, Json, Router};
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
 use fleur_protocol::{Block, LedgerState, PersistentChain, SignedTransaction};
 use serde_json::{json, Value};
 use std::{
@@ -40,8 +44,8 @@ async fn main() {
         Err(env::VarError::NotPresent) => 0,
         Err(error) => panic!("Unable to read FLEUR_GENESIS_BALANCE: {error}"),
     };
-    let genesis = build_genesis(genesis_address, genesis_balance)
-        .expect("invalid genesis configuration");
+    let genesis =
+        build_genesis(genesis_address, genesis_balance).expect("invalid genesis configuration");
     let chain = PersistentChain::open(&journal_path, genesis, "FLEUR_GENESIS_V1")
         .expect("journal must replay successfully");
     let shared = Arc::new(Mutex::new(chain));
@@ -95,7 +99,13 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             let chain_id = match env::var("FLEUR_CHAIN_ID") {
                 Ok(value) => match parse_chain_id(&value) {
                     Ok(chain_id) => chain_id,
-                    Err(_) => return rpc_error(id, -32603, "FLEUR_CHAIN_ID must be a valid unsigned integer"),
+                    Err(_) => {
+                        return rpc_error(
+                            id,
+                            -32603,
+                            "FLEUR_CHAIN_ID must be a valid unsigned integer",
+                        )
+                    }
                 },
                 Err(env::VarError::NotPresent) => 61800,
                 Err(_) => return rpc_error(id, -32603, "Unable to read FLEUR_CHAIN_ID"),
@@ -656,7 +666,10 @@ mod tests {
     #[test]
     fn configuration_parsers_accept_valid_unsigned_values_and_reject_invalid_ones() {
         assert_eq!(parse_genesis_balance("0").unwrap(), 0);
-        assert_eq!(parse_genesis_balance("340282366920938463463374607431768211455").unwrap(), u128::MAX);
+        assert_eq!(
+            parse_genesis_balance("340282366920938463463374607431768211455").unwrap(),
+            u128::MAX
+        );
         assert!(parse_genesis_balance("-1").is_err());
         assert!(parse_genesis_balance("1.5").is_err());
         assert!(parse_genesis_balance("340282366920938463463374607431768211456").is_err());
