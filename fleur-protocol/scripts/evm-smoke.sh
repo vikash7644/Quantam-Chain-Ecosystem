@@ -70,12 +70,12 @@ fi
 
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600e600c600039600e6000f35f54600101805f555f5260205ff3"}}' \
   >"$TMP_DIR/evm.json"
 
-if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm.json"; then
+if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000000000000001"' "$TMP_DIR/evm.json"; then
   cat "$TMP_DIR/evm.json"
-  echo "EVM smoke test failed: expected return value 42." >&2
+  echo "EVM smoke test failed: expected initial counter value 1." >&2
   exit 1
 fi
 
@@ -91,26 +91,37 @@ curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -d "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"fleur_evmPersistentCall\",\"params\":{\"contractAddress\":\"$ADDRESS\"}}" \
   >"$TMP_DIR/evm-existing-call.json"
 
-if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm-existing-call.json"; then
+if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000000000000002"' "$TMP_DIR/evm-existing-call.json"; then
   cat "$TMP_DIR/evm-existing-call.json"
-  echo "EVM existing-contract call failed: expected return value 42." >&2
+  echo "EVM existing-contract call failed: expected counter value 2." >&2
   exit 1
 fi
 
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":3,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"fleur_evmPersistentCall\",\"params\":{\"contractAddress\":\"$ADDRESS\"}}" \
+  >"$TMP_DIR/evm-existing-call-second.json"
+
+if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000000000000003"' "$TMP_DIR/evm-existing-call-second.json"; then
+  cat "$TMP_DIR/evm-existing-call-second.json"
+  echo "EVM storage replay failed: expected counter value 3." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600e600c600039600e6000f35f54600101805f555f5260205ff3"}}' \
   >"$TMP_DIR/evm-second.json"
 
-if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm-second.json"; then
+if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000000000000001"' "$TMP_DIR/evm-second.json"; then
   cat "$TMP_DIR/evm-second.json"
-  echo "Second EVM journal replay failed: expected return value 42." >&2
+  echo "Second deployment should start at counter value 1." >&2
   exit 1
 fi
 
 LINES=$(wc -l < "$TMP_DIR/fleur-evm.jsonl" | tr -d ' ')
-if [ "$LINES" -ne 3 ]; then
-  echo "EVM journal should contain three replayable commands; found $LINES." >&2
+if [ "$LINES" -ne 4 ]; then
+  echo "EVM journal should contain four replayable commands; found $LINES." >&2
   exit 1
 fi
 
