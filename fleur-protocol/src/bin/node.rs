@@ -248,6 +248,44 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 Err(error) => rpc_error(id, -32011, &error),
             }
         }
+        "fleur_evmPersistentCall" => {
+            let Some(contract_address) = params.get("contractAddress").and_then(Value::as_str) else {
+                return rpc_error(id, -32602, "params.contractAddress must be a hex address");
+            };
+            let call_data = match params.get("callData").and_then(Value::as_str) {
+                Some(encoded) => match decode_hex(encoded) {
+                    Ok(bytes) => bytes,
+                    Err(_) => return rpc_error(id, -32602, "params.callData must be valid hex"),
+                },
+                None => Vec::new(),
+            };
+            // Calls replay all earlier EVM commands first. This is durable command
+            // replay only; it is not yet included in block consensus or gas settlement.
+            let Ok(_chain_guard) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            let journal_path = env::var_os("FLEUR_EVM_JOURNAL")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("./data/fleur-evm.jsonl"));
+            match fleur_protocol::evm::persistent_call_contract(
+                journal_path,
+                contract_address.to_string(),
+                call_data,
+            ) {
+                Ok(report) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "mode": "persistent-command-replay",
+                        "contractAddress": report.contract_address,
+                        "deploymentGasUsed": report.deployment_gas_used.to_string(),
+                        "callGasUsed": report.call_gas_used.to_string(),
+                        "returnData": report.return_data
+                    }
+                })),
+                Err(error) => rpc_error(id, -32012, &error),
+            }
+        }
         "fleur_evmSandboxDeployAndCall" => {
             let Some(init_code) = params.get("initCode").and_then(Value::as_str) else {
                 return rpc_error(id, -32602, "params.initCode must be a hex string");
