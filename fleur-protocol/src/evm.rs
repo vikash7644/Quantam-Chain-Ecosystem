@@ -471,6 +471,23 @@ mod tests {
     }
 
     #[test]
+    fn failed_evm_execution_does_not_create_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-failed-execution-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        // Non-empty, malformed init bytecode must fail during execution before
+        // any command is written to the persistent EVM journal.
+        let result = persistent_deploy_and_call(&path, vec![0xfe], Vec::new());
+        assert!(result.is_err());
+        assert!(!path.exists(), "failed execution must not create a journal");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn persistent_calls_preserve_contract_storage_across_replay() {
         let path = std::env::temp_dir().join(format!(
             "fleur-evm-storage-replay-{}.jsonl",
