@@ -519,6 +519,30 @@ mod tests {
     }
 
     #[test]
+    fn opening_corrupt_canonical_journal_fails_closed() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-corrupt-chain-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let corrupted = "{invalid block json}\n";
+        std::fs::write(&path, corrupted).expect("write corrupted canonical journal");
+
+        let result = PersistentChain::open(&path, LedgerState::default(), "genesis");
+        assert!(
+            matches!(result, Err(ProtocolError::InvalidJournal { line: 1, .. })),
+            "startup must reject a malformed persisted block instead of silently resetting"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read canonical journal"),
+            corrupted,
+            "startup validation must not rewrite the existing journal"
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn arithmetic_overflow_is_rejected_without_mutation() {
         let mut state = LedgerState::with_genesis([("alice".into(), u128::MAX)]);
         let before = state.clone();
