@@ -2,7 +2,7 @@
 
 Fleur Network is an independent blockchain protocol project. It is not a
 Solana fork and shares no source files with Zenvora Lang. The selected smart
-contract target is Solidity/EVM only; actual EVM execution is not integrated yet.
+contract target is Solidity/EVM only; an isolated REVM execution smoke test exists, but EVM is not integrated into chain state transitions or RPC yet.
 
 ## Implemented in this development slice
 
@@ -14,13 +14,15 @@ contract target is Solidity/EVM only; actual EVM execution is not integrated yet
 - Append-only JSONL journal with validation and deterministic replay on restart.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
   and `fleur_submitTransaction`.
+- A pinned REVM 43.0.3 smoke test that deploys bytecode and verifies contract storage execution in an isolated in-memory EVM.
 - GitHub Actions checks for formatting, tests, and a release build.
 
 ## Not public-testnet ready
 
 This is a development scaffold, **not a public testnet**. There is no distributed
-consensus or peer-to-peer networking, and no EVM execution or Solidity contract
-deployment/call path yet. The JSONL journal is an MVP persistence layer, not a
+consensus or peer-to-peer networking. REVM currently runs only in an isolated test;
+Fleur RPC does not yet expose Solidity contract deployment/calls, and EVM state is
+not connected to the persistent ledger. The JSONL journal is an MVP persistence layer, not a
 production database. RPC transaction submission currently seals one accepted
 transaction per block; there is no transaction mempool or production ordering.
 The demo binary uses a deterministic test key and must never be used with real
