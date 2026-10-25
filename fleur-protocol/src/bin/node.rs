@@ -10,6 +10,14 @@ use std::{
 
 type SharedChain = Arc<Mutex<PersistentChain>>;
 
+fn parse_genesis_balance(value: &str) -> Result<u128, std::num::ParseIntError> {
+    value.parse::<u128>()
+}
+
+fn parse_chain_id(value: &str) -> Result<u64, std::num::ParseIntError> {
+    value.parse::<u64>()
+}
+
 #[tokio::main]
 async fn main() {
     let journal_path = env::var_os("FLEUR_JOURNAL")
@@ -17,8 +25,7 @@ async fn main() {
         .unwrap_or_else(|| PathBuf::from("./data/fleur-chain.jsonl"));
     let genesis_address = env::var("FLEUR_GENESIS_ADDRESS").unwrap_or_default();
     let genesis_balance = match env::var("FLEUR_GENESIS_BALANCE") {
-        Ok(value) => value
-            .parse::<u128>()
+        Ok(value) => parse_genesis_balance(&value)
             .expect("FLEUR_GENESIS_BALANCE must be a valid unsigned integer"),
         Err(env::VarError::NotPresent) => 0,
         Err(error) => panic!("Unable to read FLEUR_GENESIS_BALANCE: {error}"),
@@ -79,7 +86,7 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             // A development-only chain ID for tooling smoke tests. Operators may
             // override it with a decimal FLEUR_CHAIN_ID value.
             let chain_id = match env::var("FLEUR_CHAIN_ID") {
-                Ok(value) => match value.parse::<u64>() {
+                Ok(value) => match parse_chain_id(&value) {
                     Ok(chain_id) => chain_id,
                     Err(_) => return rpc_error(id, -32603, "FLEUR_CHAIN_ID must be a valid unsigned integer"),
                 },
@@ -613,6 +620,20 @@ mod tests {
             assert_eq!(chain.chain.ledger.balance("flr_target"), 0);
         }
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn configuration_parsers_accept_valid_unsigned_values_and_reject_invalid_ones() {
+        assert_eq!(parse_genesis_balance("0").unwrap(), 0);
+        assert_eq!(parse_genesis_balance("340282366920938463463374607431768211455").unwrap(), u128::MAX);
+        assert!(parse_genesis_balance("-1").is_err());
+        assert!(parse_genesis_balance("1.5").is_err());
+        assert!(parse_genesis_balance("340282366920938463463374607431768211456").is_err());
+        assert_eq!(parse_chain_id("61800").unwrap(), 61800);
+        assert_eq!(parse_chain_id("18446744073709551615").unwrap(), u64::MAX);
+        assert!(parse_chain_id("-1").is_err());
+        assert!(parse_chain_id("abc").is_err());
+        assert!(parse_chain_id("18446744073709551616").is_err());
     }
 
     #[tokio::test]
