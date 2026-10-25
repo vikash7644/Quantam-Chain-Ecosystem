@@ -434,6 +434,26 @@ mod tests {
     }
 
     #[tokio::test]
+    #[tokio::test]
+    async fn balance_rpc_labels_amount_as_bvrx_base_units() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 18,
+                "method": "fleur_getBalance",
+                "params": { "address": "flr_test" }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["address"], "flr_test");
+        assert_eq!(response.0["result"]["balance"], "0");
+        assert_eq!(response.0["result"]["asset"], "BVRX");
+        assert_eq!(response.0["result"]["unit"], "base-unit");
+        assert_eq!(response.0["result"]["amountEncoding"], "decimal-string");
+    }
+
+    #[tokio::test]
     async fn chain_status_rpc_returns_genesis_tip() {
         let chain = test_chain();
         let response = handle_rpc(
