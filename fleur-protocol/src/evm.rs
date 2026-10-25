@@ -112,21 +112,33 @@ pub fn persistent_deploy_and_call(
         let operation: EvmOperation = serde_json::from_str(line)
             .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
         if operation.init_code.is_empty() {
-            return Err(format!("invalid EVM journal line {}: empty init code", index + 1));
+            return Err(format!(
+                "invalid EVM journal line {}: empty init code",
+                index + 1
+            ));
         }
         operations.push(operation);
     }
 
-    let operation = EvmOperation { init_code, call_data };
+    let operation = EvmOperation {
+        init_code,
+        call_data,
+    };
     if operation.init_code.is_empty() {
         return Err("init code must not be empty".to_string());
     }
     let mut candidate = operations.clone();
     candidate.push(operation.clone());
     let reports = execute_operations(&candidate)?;
-    let report = reports.last().cloned().ok_or_else(|| "EVM journal produced no report".to_string())?;
+    let report = reports
+        .last()
+        .cloned()
+        .ok_or_else(|| "EVM journal produced no report".to_string())?;
 
-    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("cannot create EVM journal directory: {error}"))?;
     }
@@ -138,7 +150,8 @@ pub fn persistent_deploy_and_call(
         .open(path)
         .map_err(|error| format!("cannot open EVM journal: {error}"))?;
     writeln!(file, "{encoded}").map_err(|error| format!("cannot append EVM journal: {error}"))?;
-    file.sync_all().map_err(|error| format!("cannot sync EVM journal: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("cannot sync EVM journal: {error}"))?;
     Ok(report)
 }
 
@@ -167,7 +180,9 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
             } => address,
             other => return Err(format!("contract deployment did not succeed: {other:?}")),
         };
-        nonce = nonce.checked_add(1).ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
+        nonce = nonce
+            .checked_add(1)
+            .ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
 
         let call = evm
             .transact_commit(
@@ -300,10 +315,8 @@ mod tests {
 
     #[test]
     fn persistent_evm_journal_replays_prior_deployments_after_restart() {
-        let path = std::env::temp_dir().join(format!(
-            "fleur-evm-journal-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fleur-evm-journal-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let init_code = vec![
             0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
