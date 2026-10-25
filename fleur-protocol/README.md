@@ -70,6 +70,19 @@ curl -s http://127.0.0.1:8545/rpc \
   -d '{"jsonrpc":"2.0","id":1,"method":"fleur_chainStatus"}'
 ```
 
+For a disposable EVM sandbox smoke test, submit init bytecode that returns a tiny
+runtime contract. The returned `returnData` should be a 32-byte hex value ending in
+`2a` (decimal 42):
+
+```sh
+curl -s http://127.0.0.1:8545/rpc \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmSandboxDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}'
+```
+
+This smoke test does not create a durable contract or a ledger transaction. The
+sandbox resets after the request; reported gas is diagnostic only and is not charged.
+
 ## Ten-day sprint target
 
 1. Protocol rules and clean bootstrap.
