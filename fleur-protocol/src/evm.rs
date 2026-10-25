@@ -46,9 +46,14 @@ mod tests {
     #[test]
     fn revm_deploys_contract_and_executes_storage_write() {
         let expected_value = 0x42u8;
-        let bytecode: Bytes = [INIT_CODE, RETURN_RUNTIME, RUNTIME_BYTECODE, &[expected_value]]
-            .concat()
-            .into();
+        let bytecode: Bytes = [
+            INIT_CODE,
+            RETURN_RUNTIME,
+            RUNTIME_BYTECODE,
+            &[expected_value],
+        ]
+        .concat()
+        .into();
         let context = Context::mainnet().with_db(CacheDB::<EmptyDB>::default());
         let mut evm = context.build_mainnet();
 
