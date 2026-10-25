@@ -453,6 +453,24 @@ mod tests {
     }
 
     #[test]
+    fn invalid_persistent_call_does_not_append_to_evm_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-invalid-call-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let init_code = vec![
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+        ];
+        persistent_deploy_and_call(&path, init_code, Vec::new()).expect("initial deploy");
+        let before = std::fs::read_to_string(&path).unwrap();
+        assert!(persistent_call_contract(&path, "0x1234".to_string(), Vec::new()).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn persistent_calls_preserve_contract_storage_across_replay() {
         let path = std::env::temp_dir().join(format!(
             "fleur-evm-storage-replay-{}.jsonl",
