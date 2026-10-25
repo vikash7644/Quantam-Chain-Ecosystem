@@ -515,6 +515,31 @@ mod tests {
     }
 
     #[test]
+    fn corrupt_persistent_journal_is_rejected_without_modification() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-corrupt-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let corrupted = "{not valid json}\n";
+        std::fs::write(&path, corrupted).expect("write corrupted journal");
+
+        let init_code = vec![
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3,
+            0x60, 0x2a, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+        ];
+        let result = persistent_deploy_and_call(&path, init_code, Vec::new());
+
+        assert!(result.is_err(), "corrupt journal must be rejected");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read journal after rejection"),
+            corrupted,
+            "rejected operation must not modify the existing journal"
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn deployment_and_call_report_gas_and_return_data() {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
