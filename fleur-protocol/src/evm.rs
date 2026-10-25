@@ -298,6 +298,32 @@ mod tests {
     }
 
     #[test]
+    fn persistent_evm_journal_replays_prior_deployments_after_restart() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let init_code = vec![
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+        ];
+
+        let first = persistent_deploy_and_call(&path, init_code.clone(), Vec::new()).unwrap();
+        assert_eq!(first.return_data, format!("{:064x}", 42));
+        let second = persistent_deploy_and_call(&path, init_code.clone(), Vec::new()).unwrap();
+        assert_eq!(second.return_data, format!("{:064x}", 42));
+        assert_ne!(first.contract_address, second.contract_address);
+
+        let lines = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(lines.lines().count(), 2);
+        let after_restart = persistent_deploy_and_call(&path, init_code, Vec::new()).unwrap();
+        assert_eq!(after_restart.return_data, format!("{:064x}", 42));
+        assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 3);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn deployment_and_call_report_gas_and_return_data() {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
