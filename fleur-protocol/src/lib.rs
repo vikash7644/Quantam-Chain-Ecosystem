@@ -487,6 +487,38 @@ mod tests {
     }
 
     #[test]
+    fn rejected_persistent_block_is_not_written_to_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-rejected-block-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let signed = signed_transfer(0, 7, 1);
+        let sender = signed.transaction.sender.clone();
+        let genesis = LedgerState::with_genesis([(sender, 100)]);
+        let invalid_block = Block {
+            height: 1,
+            previous_hash: "wrong-parent".into(),
+            transactions: vec![signed],
+        };
+
+        let mut persistent =
+            PersistentChain::open(&path, genesis, "genesis").expect("open clean chain journal");
+        let before = persistent.chain.clone();
+        assert_eq!(
+            persistent.append_block(&invalid_block),
+            Err(ProtocolError::BadParentHash)
+        );
+        assert_eq!(persistent.chain, before);
+        assert!(
+            !path.exists(),
+            "a rejected block must not create or append to the canonical journal"
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn arithmetic_overflow_is_rejected_without_mutation() {
         let mut state = LedgerState::with_genesis([("alice".into(), u128::MAX)]);
         let before = state.clone();
