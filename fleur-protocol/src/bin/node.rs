@@ -1,4 +1,4 @@
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{extract::State, routing::{get, post}, Json, Router};
 use fleur_protocol::{Block, LedgerState, PersistentChain, SignedTransaction};
 use serde_json::{json, Value};
 use std::{
@@ -30,6 +30,7 @@ async fn main() {
     let shared = Arc::new(Mutex::new(chain));
 
     let app = Router::new()
+        .route("/health", get(handle_health))
         .route("/rpc", post(handle_rpc))
         .with_state(shared);
     let address: SocketAddr = env::var("FLEUR_RPC_ADDR")
@@ -43,6 +44,21 @@ async fn main() {
     println!("Fleur single-node dev RPC listening at http://{address}/rpc");
     println!("Development endpoint only: no consensus, peer networking, or persistent EVM state.");
     axum::serve(listener, app).await.expect("serve Fleur RPC");
+}
+
+async fn handle_health(State(chain): State<SharedChain>) -> Json<Value> {
+    match chain.lock() {
+        Ok(chain) => Json(json!({
+            "status": "ok",
+            "service": "fleur-node",
+            "height": chain.chain.tip_height
+        })),
+        Err(_) => Json(json!({
+            "status": "error",
+            "service": "fleur-node",
+            "reason": "chain state lock poisoned"
+        })),
+    }
 }
 
 async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>) -> Json<Value> {
@@ -590,6 +606,14 @@ mod tests {
             assert_eq!(chain.chain.ledger.balance("flr_target"), 0);
         }
         assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn health_handler_reports_chain_height() {
+        let response = handle_health(State(test_chain())).await;
+        assert_eq!(response.0["status"], "ok");
+        assert_eq!(response.0["service"], "fleur-node");
+        assert_eq!(response.0["height"], 0);
     }
 
     #[tokio::test]
