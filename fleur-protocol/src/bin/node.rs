@@ -16,10 +16,13 @@ async fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("./data/fleur-chain.jsonl"));
     let genesis_address = env::var("FLEUR_GENESIS_ADDRESS").unwrap_or_default();
-    let genesis_balance = env::var("FLEUR_GENESIS_BALANCE")
-        .ok()
-        .and_then(|value| value.parse::<u128>().ok())
-        .unwrap_or_default();
+    let genesis_balance = match env::var("FLEUR_GENESIS_BALANCE") {
+        Ok(value) => value
+            .parse::<u128>()
+            .expect("FLEUR_GENESIS_BALANCE must be a valid unsigned integer"),
+        Err(env::VarError::NotPresent) => 0,
+        Err(error) => panic!("Unable to read FLEUR_GENESIS_BALANCE: {error}"),
+    };
     let genesis = if genesis_address.is_empty() {
         LedgerState::default()
     } else {
@@ -75,10 +78,14 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
         "eth_chainId" => {
             // A development-only chain ID for tooling smoke tests. Operators may
             // override it with a decimal FLEUR_CHAIN_ID value.
-            let chain_id = env::var("FLEUR_CHAIN_ID")
-                .ok()
-                .and_then(|value| value.parse::<u64>().ok())
-                .unwrap_or(61800);
+            let chain_id = match env::var("FLEUR_CHAIN_ID") {
+                Ok(value) => match value.parse::<u64>() {
+                    Ok(chain_id) => chain_id,
+                    Err(_) => return rpc_error(id, -32603, "FLEUR_CHAIN_ID must be a valid unsigned integer"),
+                },
+                Err(env::VarError::NotPresent) => 61800,
+                Err(_) => return rpc_error(id, -32603, "Unable to read FLEUR_CHAIN_ID"),
+            };
             Json(json!({
                 "jsonrpc": "2.0",
                 "id": id,
