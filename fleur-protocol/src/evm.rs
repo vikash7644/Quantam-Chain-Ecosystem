@@ -89,19 +89,33 @@ fn hex_encode(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use revm::{
-        bytecode::opcode,
-        context_interface::result::Output,
-        primitives::StorageValue,
-        ExecuteEvm,
+        bytecode::opcode, context_interface::result::Output, primitives::StorageValue, ExecuteEvm,
     };
 
     const INIT_CODE: &[u8] = &[
-        opcode::PUSH1, 0x01, opcode::PUSH1, 0x17, opcode::PUSH1, 0x1f, opcode::CODECOPY,
-        opcode::PUSH0, opcode::MLOAD, opcode::PUSH0, opcode::SSTORE,
+        opcode::PUSH1,
+        0x01,
+        opcode::PUSH1,
+        0x17,
+        opcode::PUSH1,
+        0x1f,
+        opcode::CODECOPY,
+        opcode::PUSH0,
+        opcode::MLOAD,
+        opcode::PUSH0,
+        opcode::SSTORE,
     ];
     const RETURN_RUNTIME: &[u8] = &[
-        opcode::PUSH1, 0x02, opcode::PUSH1, 0x15, opcode::PUSH0, opcode::CODECOPY,
-        opcode::PUSH1, 0x02, opcode::PUSH0, opcode::RETURN,
+        opcode::PUSH1,
+        0x02,
+        opcode::PUSH1,
+        0x15,
+        opcode::PUSH0,
+        opcode::CODECOPY,
+        opcode::PUSH1,
+        0x02,
+        opcode::PUSH0,
+        opcode::RETURN,
     ];
     const RUNTIME_BYTECODE: &[u8] = &[opcode::PUSH0, opcode::SLOAD];
 
@@ -168,8 +182,8 @@ mod tests {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
         let init_code = vec![
-            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3,
-            0x60, 0x2a, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
         ];
         let report = deploy_and_call(init_code, Vec::new()).unwrap();
         assert!(report.contract_address.starts_with("0x"));
