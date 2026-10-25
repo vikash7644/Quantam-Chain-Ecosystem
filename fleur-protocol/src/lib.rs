@@ -1,4 +1,6 @@
 //! Fleur Network's independent protocol core.
+
+pub mod evm;
 //!
 //! This is a deterministic protocol prototype, not a production consensus
 //! implementation. Transactions now require Ed25519 authentication when using
