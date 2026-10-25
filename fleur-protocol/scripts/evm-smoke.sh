@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+CRATE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+cd "$CRATE_DIR"
+
+PORT=${FLEUR_SMOKE_PORT:-18545}
+TMP_DIR=$(mktemp -d)
+PID=""
+cleanup() {
+  if [ -n "$PID" ]; then
+    kill "$PID" 2>/dev/null || true
+    wait "$PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT INT TERM
+
+FLEUR_RPC_ADDR="127.0.0.1:$PORT" \
+FLEUR_JOURNAL="$TMP_DIR/fleur-chain.jsonl" \
+  cargo run --release --bin node >"$TMP_DIR/node.log" 2>&1 &
+PID=$!
+
+READY=0
+i=0
+while [ "$i" -lt 40 ]; do
+  if curl -fsS "http://127.0.0.1:$PORT/rpc" \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"fleur_chainStatus"}' \
+    >"$TMP_DIR/status.json" 2>/dev/null; then
+    READY=1
+    break
+  fi
+  if ! kill -0 "$PID" 2>/dev/null; then
+    cat "$TMP_DIR/node.log"
+    echo "Fleur RPC node exited before becoming ready." >&2
+    exit 1
+  fi
+  sleep 1
+  i=$((i + 1))
+done
+
+if [ "$READY" -ne 1 ]; then
+  cat "$TMP_DIR/node.log"
+  echo "Timed out waiting for Fleur RPC node." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmSandboxDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
+  >"$TMP_DIR/evm.json"
+
+if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm.json"; then
+  cat "$TMP_DIR/evm.json"
+  echo "EVM smoke test failed: expected return value 42." >&2
+  exit 1
+fi
+
+echo "Fleur JSON-RPC EVM sandbox smoke test passed (return value 42)."
+echo "Note: this checks the isolated in-memory sandbox, not persistent EVM state."
