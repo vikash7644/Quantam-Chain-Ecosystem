@@ -79,7 +79,7 @@ if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
-ADDRESS=$(sed -n 's/.*"contractAddress":"\\([^"]*\\)".*/\\1/p' "$TMP_DIR/evm.json")
+ADDRESS=$(sed -n 's/.*"contractAddress":"\([^"]*\)".*/\1/p' "$TMP_DIR/evm.json")
 if [ -z "$ADDRESS" ]; then
   cat "$TMP_DIR/evm.json"
   echo "EVM smoke test failed: deployment response did not include contract address." >&2
