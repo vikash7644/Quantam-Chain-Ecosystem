@@ -15,6 +15,7 @@ but it does not share state with the persistent ledger.
 - Append-only JSONL journal with validation and deterministic replay on restart.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
   `fleur_submitTransaction`, `fleur_submitBlock` for atomic validation of a supplied multi-transaction block, and `fleur_getBlockByHeight` for persisted block lookup.
+- Initial Ethereum metadata compatibility methods: `eth_chainId` (development chain ID defaults to decimal 61800 / `0xf168`; override with `FLEUR_CHAIN_ID`) and `eth_blockNumber`. These are a small RPC subset, not full Ethereum JSON-RPC compatibility.
 - A pinned REVM 43.0.3 execution sandbox plus a replayable EVM command journal (`fleur_evmPersistentDeployAndCall`) that reconstructs prior deployments and calls from JSONL on each request/restart.
 - GitHub Actions checks for formatting, tests, and a release build.
 
