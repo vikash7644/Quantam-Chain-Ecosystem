@@ -16,14 +16,14 @@ but it does not share state with the persistent ledger.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
   `fleur_submitTransaction`, `fleur_submitBlock` for atomic validation of a supplied multi-transaction block, and `fleur_getBlockByHeight` for persisted block lookup.
 - Initial Ethereum metadata compatibility methods: `eth_chainId` (development chain ID defaults to decimal 61800 / `0xf168`; override with `FLEUR_CHAIN_ID`) and `eth_blockNumber`. These are a small RPC subset, not full Ethereum JSON-RPC compatibility.
-- A pinned REVM 43.0.3 execution sandbox plus a replayable EVM command journal (`fleur_evmPersistentDeployAndCall`) that reconstructs prior deployments and calls from JSONL on each request/restart.
+- A pinned REVM 43.0.3 execution sandbox plus a replayable EVM command journal. `fleur_evmPersistentDeployAndCall` deploys bytecode and calls it; `fleur_evmPersistentCall` replays the journal and calls an existing contract address.
 - GitHub Actions checks for formatting, tests, and a release build.
 
 ## Not public-testnet ready
 
 This is a development scaffold, **not a public testnet**. There is no distributed
 consensus or peer-to-peer networking. `fleur_evmSandboxDeployAndCall` runs init bytecode
-and calls the resulting contract in a fresh in-memory EVM, and is not a production Ethereum-compatible transaction path. The separate EVM command journal can replay prior deployments/calls across requests and restarts, but it is not included in chain blocks, has no dedicated state query/call-existing-contract RPC yet, and is not an atomic part of block validation. Ethereum account/signature handling
+and calls the resulting contract in a fresh in-memory EVM, and is not a production Ethereum-compatible transaction path. The separate EVM command journal can replay deployments and calls to existing contract addresses across requests and restarts, but it is not included in chain blocks, has no standard contract-code/storage query methods, and is not an atomic part of block validation. Ethereum account/signature handling
 and EVM gas settlement are not integrated with ledger transactions. The JSONL journal is an MVP persistence layer, not a
 production database. `fleur_submitTransaction` currently seals one accepted transaction per block; `fleur_submitBlock` accepts a caller-supplied block and validates it atomically, but there is no transaction mempool, block proposer, or production ordering. `fleur_getBlockByHeight` scans the local JSONL journal for explorer clients; height 0 (genesis) is configuration-defined and is not returned as a persisted block.
 The demo binary uses a deterministic test key and must never be used with real
@@ -54,8 +54,9 @@ The CI also starts the release node and exercises the EVM JSON-RPC path end to e
 sh scripts/evm-smoke.sh
 ```
 
-This smoke test confirms that an RPC request deploys and calls the sample bytecode
-and returns 42. It does **not** prove persistence across requests or ledger integration.
+This smoke test confirms the basic Ethereum metadata methods, deployment, a later call
+to the returned contract address, and journal replay across RPC requests. It does **not**
+prove block-level EVM state commitment or ledger gas integration.
 
 Run the demo binary:
 
