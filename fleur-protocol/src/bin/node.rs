@@ -41,7 +41,7 @@ async fn main() {
         .await
         .expect("bind Fleur RPC listener");
     println!("Fleur single-node dev RPC listening at http://{address}/rpc");
-    println!("This is a development endpoint; consensus and EVM execution are not implemented.");
+    println!("Development endpoint only: no consensus, peer networking, or persistent EVM state.");
     axum::serve(listener, app).await.expect("serve Fleur RPC");
 }
 
@@ -111,8 +111,49 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 Err(error) => rpc_error(id, -32000, &format!("{error:?}")),
             }
         }
+        "fleur_evmSandboxDeployAndCall" => {
+            let Some(init_code) = params.get("initCode").and_then(Value::as_str) else {
+                return rpc_error(id, -32602, "params.initCode must be a hex string");
+            };
+            let init_code = match decode_hex(init_code) {
+                Ok(bytes) if !bytes.is_empty() => bytes,
+                _ => return rpc_error(id, -32602, "params.initCode must be non-empty valid hex"),
+            };
+            let call_data = match params.get("callData").and_then(Value::as_str) {
+                Some(encoded) => match decode_hex(encoded) {
+                    Ok(bytes) => bytes,
+                    Err(_) => return rpc_error(id, -32602, "params.callData must be valid hex"),
+                },
+                None => Vec::new(),
+            };
+            match fleur_protocol::evm::deploy_and_call(init_code, call_data) {
+                Ok(report) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "mode": "isolated-in-memory-sandbox",
+                        "contractAddress": report.contract_address,
+                        "deploymentGasUsed": report.deployment_gas_used.to_string(),
+                        "callGasUsed": report.call_gas_used.to_string(),
+                        "returnData": report.return_data
+                    }
+                })),
+                Err(error) => rpc_error(id, -32010, &error),
+            }
+        }
         _ => rpc_error(id, -32601, "Method not found"),
     }
+}
+
+fn decode_hex(input: &str) -> Result<Vec<u8>, ()> {
+    let input = input.strip_prefix("0x").unwrap_or(input);
+    if input.len() % 2 != 0 {
+        return Err(());
+    }
+    (0..input.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&input[index..index + 2], 16).map_err(|_| ()))
+        .collect()
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
