@@ -329,4 +329,19 @@ mod tests {
         .await;
         assert_eq!(response.0["error"]["code"], -32601);
     }
+
+    #[tokio::test]
+    async fn evm_sandbox_rpc_rejects_malformed_init_code() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 6,
+                "method": "fleur_evmSandboxDeployAndCall",
+                "params": { "initCode": "0xzz" }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["error"]["code"], -32602);
+    }
 }
