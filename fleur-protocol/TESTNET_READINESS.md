@@ -9,10 +9,11 @@ This checklist is intentionally conservative. A passing unit-test suite is not p
 - [x] Sender nonce replay protection.
 - [x] Block height/parent continuity checks and append-only block journal replay.
 - [x] Single-node JSON-RPC for chain status, balance, and signed transfer submission.
+- [x] Operator `GET /health` endpoint with a smoke-test check.
 - [x] REVM sandbox and replayable EVM command journal smoke-tested in CI.
 - [ ] EVM contract state committed atomically with chain blocks.
 - [ ] EVM transaction signatures, account nonce, intrinsic gas, fee charging/refunds, and failure semantics specified and tested.
-- [ ] Existing deployed-contract call path that persists state changes and survives restart.
+- [x] Existing deployed-contract call path that replays persisted state changes across calls/restarts (still separate from canonical blocks).
 - [ ] Mempool policy, deterministic transaction ordering, and block production rules.
 - [ ] Multi-node peer discovery, authenticated peer messages, block propagation, and synchronization.
 - [ ] A consensus/finality mechanism with adversarial and restart tests.
