@@ -49,6 +49,16 @@ A one-command verification script is also available:
 sh scripts/verify.sh
 ```
 
+The CI also starts the release node and exercises the EVM JSON-RPC path end to end
+(using `curl`):
+
+```sh
+sh scripts/evm-smoke.sh
+```
+
+This smoke test confirms that an RPC request deploys and calls the sample bytecode
+and returns 42. It does **not** prove persistence across requests or ledger integration.
+
 Run the demo binary:
 
 ```sh
