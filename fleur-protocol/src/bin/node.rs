@@ -116,6 +116,23 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 "result": format!("0x{:x}", chain.chain.tip_height)
             }))
         }
+        "fleur_nativeCoin" => {
+            // Identifies the planned native asset. This metadata does not imply
+            // a finalized supply policy, EVM gas settlement, or public launch.
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "name": "Fleur Network Native Coin",
+                    "symbol": "BVRX",
+                    "assetType": "native",
+                    "unit": "base-unit",
+                    "amountEncoding": "decimal-string",
+                    "supplyPolicy": "not-finalized",
+                    "networkStatus": "development-only"
+                }
+            }))
+        }
         "fleur_chainStatus" => {
             let Ok(chain) = chain.lock() else {
                 return rpc_error(id, -32603, "Chain state lock poisoned");
@@ -651,6 +668,24 @@ mod tests {
     }
 
     #[tokio::test]
+    #[tokio::test]
+    async fn native_coin_rpc_reports_bvrx_without_claiming_final_supply() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "fleur_nativeCoin"
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["name"], "Fleur Network Native Coin");
+        assert_eq!(response.0["result"]["symbol"], "BVRX");
+        assert_eq!(response.0["result"]["assetType"], "native");
+        assert_eq!(response.0["result"]["supplyPolicy"], "not-finalized");
+        assert_eq!(response.0["result"]["networkStatus"], "development-only");
+    }
+
     async fn health_handler_reports_chain_height() {
         let response = handle_health(State(test_chain())).await;
         assert_eq!(response.0["status"], "ok");
