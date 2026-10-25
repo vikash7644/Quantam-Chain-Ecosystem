@@ -75,7 +75,11 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 return rpc_error(id, -32602, "params.height must be an unsigned integer");
             };
             if height == 0 {
-                return rpc_error(id, -32602, "genesis is configuration-defined; request height >= 1");
+                return rpc_error(
+                    id,
+                    -32602,
+                    "genesis is configuration-defined; request height >= 1",
+                );
             }
             let journal_path = env::var_os("FLEUR_JOURNAL")
                 .map(PathBuf::from)
@@ -91,7 +95,13 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 }
                 let block: Block = match serde_json::from_str(line) {
                     Ok(block) => block,
-                    Err(_) => return rpc_error(id, -32020, &format!("Invalid block journal entry at line {}", index + 1)),
+                    Err(_) => {
+                        return rpc_error(
+                            id,
+                            -32020,
+                            &format!("Invalid block journal entry at line {}", index + 1),
+                        )
+                    }
                 };
                 if block.height == height {
                     let block_hash = match block.hash() {
@@ -354,7 +364,13 @@ mod tests {
         .await;
         std::env::remove_var("FLEUR_JOURNAL");
         assert_eq!(response.0["result"]["height"], 1);
-        assert_eq!(response.0["result"]["transactions"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            response.0["result"]["transactions"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -369,8 +385,7 @@ mod tests {
         let public_key = signing_key.verifying_key().to_bytes();
         let sender = fleur_protocol::address_from_public_key(&public_key);
         let genesis = LedgerState::with_genesis([(sender.clone(), 100)]);
-        let persistent =
-            PersistentChain::open(&path, genesis, "FLEUR_GENESIS_V1").unwrap();
+        let persistent = PersistentChain::open(&path, genesis, "FLEUR_GENESIS_V1").unwrap();
         let shared = Arc::new(Mutex::new(persistent));
 
         let make_signed = |nonce: u64, recipient: &str, amount: u128| {
