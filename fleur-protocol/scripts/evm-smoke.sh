@@ -50,6 +50,26 @@ fi
 
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":10,"method":"eth_chainId"}' \
+  >"$TMP_DIR/chain-id.json"
+if ! grep -q '"result":"0xf168"' "$TMP_DIR/chain-id.json"; then
+  cat "$TMP_DIR/chain-id.json"
+  echo "Ethereum RPC smoke test failed: unexpected development chain ID." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":11,"method":"eth_blockNumber"}' \
+  >"$TMP_DIR/block-number.json"
+if ! grep -q '"result":"0x0"' "$TMP_DIR/block-number.json"; then
+  cat "$TMP_DIR/block-number.json"
+  echo "Ethereum RPC smoke test failed: expected genesis block height 0." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
   >"$TMP_DIR/evm.json"
 
