@@ -540,6 +540,29 @@ mod tests {
     }
 
     #[test]
+    fn reverted_persistent_execution_does_not_append_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-revert-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        // Init code returns a runtime that immediately REVERTs.
+        let reverting_init_code = vec![
+            0x60, 0x03, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x03, 0x60, 0x00, 0xf3,
+            0x5f, 0x5f, 0xfd,
+        ];
+        let result = persistent_deploy_and_call(&path, reverting_init_code, Vec::new());
+
+        assert!(result.is_err(), "reverting runtime must not be accepted");
+        assert!(
+            !path.exists(),
+            "failed deploy-and-call must not create a journal entry"
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn deployment_and_call_report_gas_and_return_data() {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
