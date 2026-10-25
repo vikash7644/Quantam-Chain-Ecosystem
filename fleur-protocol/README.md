@@ -14,7 +14,7 @@ but it does not share state with the persistent ledger.
 - SHA-256 block hashes, block-height checks, and parent-hash continuity checks.
 - Append-only JSONL journal with validation and deterministic replay on restart.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
-  and `fleur_submitTransaction`.
+  `fleur_submitTransaction`, and `fleur_submitBlock` for atomic validation of a supplied multi-transaction block.
 - A pinned REVM 43.0.3 execution sandbox plus a replayable EVM command journal (`fleur_evmPersistentDeployAndCall`) that reconstructs prior deployments and calls from JSONL on each request/restart.
 - GitHub Actions checks for formatting, tests, and a release build.
 
@@ -24,8 +24,7 @@ This is a development scaffold, **not a public testnet**. There is no distribute
 consensus or peer-to-peer networking. `fleur_evmSandboxDeployAndCall` runs init bytecode
 and calls the resulting contract in a fresh in-memory EVM, and is not a production Ethereum-compatible transaction path. The separate EVM command journal can replay prior deployments/calls across requests and restarts, but it is not included in chain blocks, has no dedicated state query/call-existing-contract RPC yet, and is not an atomic part of block validation. Ethereum account/signature handling
 and EVM gas settlement are not integrated with ledger transactions. The JSONL journal is an MVP persistence layer, not a
-production database. RPC transaction submission currently seals one accepted
-transaction per block; there is no transaction mempool or production ordering.
+production database. `fleur_submitTransaction` currently seals one accepted transaction per block; `fleur_submitBlock` accepts a caller-supplied block and validates it atomically, but there is no transaction mempool, block proposer, or production ordering.
 The demo binary uses a deterministic test key and must never be used with real
 funds. Do not expose the development RPC server publicly.
 
