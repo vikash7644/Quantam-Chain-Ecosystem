@@ -59,5 +59,22 @@ if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
+  >"$TMP_DIR/evm-second.json"
+
+if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm-second.json"; then
+  cat "$TMP_DIR/evm-second.json"
+  echo "Second EVM journal replay failed: expected return value 42." >&2
+  exit 1
+fi
+
+LINES=$(wc -l < "$TMP_DIR/fleur-evm.jsonl" | tr -d ' ')
+if [ "$LINES" -ne 2 ]; then
+  echo "EVM journal should contain two committed commands; found $LINES." >&2
+  exit 1
+fi
+
 echo "Fleur persistent EVM JSON-RPC smoke test passed (return value 42)."
-echo "Note: commands replay from a separate EVM journal; they are not yet block-committed."
+echo "Two RPC requests replayed through the separate EVM journal; commands are not yet block-committed."
