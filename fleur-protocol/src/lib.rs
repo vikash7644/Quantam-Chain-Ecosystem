@@ -1,10 +1,10 @@
 //! Fleur Network's independent protocol core.
-
-pub mod evm;
 //!
 //! This is a deterministic protocol prototype, not a production consensus
 //! implementation. Transactions now require Ed25519 authentication when using
 //! apply_signed_transfer; raw apply_transfer remains a low-level state helper.
+
+pub mod evm;
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
