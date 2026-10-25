@@ -713,7 +713,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[tokio::test]
     async fn native_coin_rpc_reports_bvrx_without_claiming_final_supply() {
         let response = handle_rpc(
             State(test_chain()),
@@ -731,6 +730,7 @@ mod tests {
         assert_eq!(response.0["result"]["networkStatus"], "development-only");
     }
 
+    #[tokio::test]
     async fn health_handler_reports_chain_height() {
         let response = handle_health(State(test_chain())).await;
         assert_eq!(response.0["status"], "ok");
