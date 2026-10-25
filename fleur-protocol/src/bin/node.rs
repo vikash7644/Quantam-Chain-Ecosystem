@@ -221,11 +221,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-
     #[tokio::test]
     async fn invalid_signature_rpc_is_rejected_without_advancing_chain() {
-        let path = std::env::temp_dir()
-            .join(format!("fleur-rpc-invalid-{}.jsonl", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("fleur-rpc-invalid-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let chain = PersistentChain::open(&path, LedgerState::default(), "FLEUR_GENESIS_V1")
             .expect("open test journal");
