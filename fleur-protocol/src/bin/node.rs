@@ -70,6 +70,48 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 }
             }))
         }
+        "fleur_getBlockByHeight" => {
+            let Some(height) = params.get("height").and_then(Value::as_u64) else {
+                return rpc_error(id, -32602, "params.height must be an unsigned integer");
+            };
+            if height == 0 {
+                return rpc_error(id, -32602, "genesis is configuration-defined; request height >= 1");
+            }
+            let journal_path = env::var_os("FLEUR_JOURNAL")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("./data/fleur-chain.jsonl"));
+            let contents = match std::fs::read_to_string(&journal_path) {
+                Ok(contents) => contents,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Err(_) => return rpc_error(id, -32020, "Unable to read block journal"),
+            };
+            for (index, line) in contents.lines().enumerate() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let block: Block = match serde_json::from_str(line) {
+                    Ok(block) => block,
+                    Err(_) => return rpc_error(id, -32020, &format!("Invalid block journal entry at line {}", index + 1)),
+                };
+                if block.height == height {
+                    let block_hash = match block.hash() {
+                        Ok(hash) => hash,
+                        Err(_) => return rpc_error(id, -32020, "Unable to hash requested block"),
+                    };
+                    return Json(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "height": block.height,
+                            "hash": block_hash,
+                            "parentHash": block.previous_hash,
+                            "transactions": block.transactions
+                        }
+                    }));
+                }
+            }
+            Json(json!({ "jsonrpc": "2.0", "id": id, "result": null }))
+        }
         "fleur_getBalance" => {
             let Some(address) = params.get("address").and_then(Value::as_str) else {
                 return rpc_error(id, -32602, "params.address must be a string");
@@ -263,6 +305,57 @@ mod tests {
         .await;
         assert_eq!(response.0["result"]["height"], 0);
         assert_eq!(response.0["result"]["blockHash"], "FLEUR_GENESIS_V1");
+    }
+
+    #[tokio::test]
+    async fn block_lookup_returns_persisted_block_by_height() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let path =
+            std::env::temp_dir().join(format!("fleur-rpc-lookup-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let signing_key = SigningKey::from_bytes(&[13u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = fleur_protocol::address_from_public_key(&public_key);
+        let tx = fleur_protocol::Transaction {
+            sender: sender.clone(),
+            recipient: "flr_lookup_recipient".to_string(),
+            amount: 5,
+            fee: 1,
+            nonce: 0,
+        };
+        let signature = signing_key.sign(&tx.signing_bytes().unwrap());
+        let block = Block {
+            height: 1,
+            previous_hash: "FLEUR_GENESIS_V1".to_string(),
+            transactions: vec![SignedTransaction {
+                transaction: tx,
+                public_key: hex_encode(&public_key),
+                signature: hex_encode(&signature.to_bytes()),
+            }],
+        };
+        let mut persistent = PersistentChain::open(
+            &path,
+            LedgerState::with_genesis([(sender, 20)]),
+            "FLEUR_GENESIS_V1",
+        )
+        .unwrap();
+        persistent.append_block(&block).unwrap();
+        std::env::set_var("FLEUR_JOURNAL", &path);
+        let response = handle_rpc(
+            State(Arc::new(Mutex::new(persistent))),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "fleur_getBlockByHeight",
+                "params": { "height": 1 }
+            })),
+        )
+        .await;
+        std::env::remove_var("FLEUR_JOURNAL");
+        assert_eq!(response.0["result"]["height"], 1);
+        assert_eq!(response.0["result"]["transactions"].as_array().unwrap().len(), 1);
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
