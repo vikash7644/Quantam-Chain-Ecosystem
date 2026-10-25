@@ -249,7 +249,8 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             }
         }
         "fleur_evmPersistentCall" => {
-            let Some(contract_address) = params.get("contractAddress").and_then(Value::as_str) else {
+            let Some(contract_address) = params.get("contractAddress").and_then(Value::as_str)
+            else {
                 return rpc_error(id, -32602, "params.contractAddress must be a hex address");
             };
             let call_data = match params.get("callData").and_then(Value::as_str) {
