@@ -75,7 +75,7 @@ Optional environment variables:
 
 - `FLEUR_JOURNAL`: append-only journal path (default `./data/fleur-chain.jsonl`).
 - `FLEUR_GENESIS_ADDRESS`: address to fund at genesis (default empty ledger).
-- `FLEUR_GENESIS_BALANCE`: initial balance for that address (default `0`; invalid non-integer values stop startup rather than silently becoming zero).
+- `FLEUR_GENESIS_BALANCE`: initial balance for that address (default `0`; invalid non-integer values stop startup rather than silently becoming zero; a nonzero balance without `FLEUR_GENESIS_ADDRESS` also stops startup).
 - `FLEUR_RPC_ADDR`: bind address (default `127.0.0.1:8545`).
 - `FLEUR_EVM_JOURNAL`: replayable EVM command journal path (default `./data/fleur-evm.jsonl`).
 - `FLEUR_CHAIN_ID`: development chain ID as an unsigned decimal integer (default `61800`; invalid values are reported as a JSON-RPC configuration error).
