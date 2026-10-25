@@ -83,6 +83,26 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 "result": { "address": address, "balance": chain.chain.ledger.balance(address).to_string() }
             }))
         }
+        "fleur_submitBlock" => {
+            let Some(value) = params.get("block").cloned() else {
+                return rpc_error(id, -32602, "params.block is required");
+            };
+            let block: Block = match serde_json::from_value(value) {
+                Ok(block) => block,
+                Err(_) => return rpc_error(id, -32602, "Invalid block shape"),
+            };
+            let Ok(mut chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            match chain.append_block(&block) {
+                Ok(hash) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "height": block.height, "blockHash": hash }
+                })),
+                Err(error) => rpc_error(id, -32000, &format!("{error:?}")),
+            }
+        }
         "fleur_submitTransaction" => {
             let Some(value) = params.get("signedTransaction").cloned() else {
                 return rpc_error(id, -32602, "params.signedTransaction is required");
@@ -243,6 +263,64 @@ mod tests {
         .await;
         assert_eq!(response.0["result"]["height"], 0);
         assert_eq!(response.0["result"]["blockHash"], "FLEUR_GENESIS_V1");
+    }
+
+    #[tokio::test]
+    async fn submit_block_rpc_accepts_atomic_multi_transaction_block() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let path =
+            std::env::temp_dir().join(format!("fleur-rpc-block-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let signing_key = SigningKey::from_bytes(&[12u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = fleur_protocol::address_from_public_key(&public_key);
+        let genesis = LedgerState::with_genesis([(sender.clone(), 100)]);
+        let persistent =
+            PersistentChain::open(&path, genesis, "FLEUR_GENESIS_V1").unwrap();
+        let shared = Arc::new(Mutex::new(persistent));
+
+        let make_signed = |nonce: u64, recipient: &str, amount: u128| {
+            let transaction = fleur_protocol::Transaction {
+                sender: sender.clone(),
+                recipient: recipient.to_string(),
+                amount,
+                fee: 1,
+                nonce,
+            };
+            let signature = signing_key.sign(&transaction.signing_bytes().unwrap());
+            SignedTransaction {
+                transaction,
+                public_key: hex_encode(&public_key),
+                signature: hex_encode(&signature.to_bytes()),
+            }
+        };
+        let block = Block {
+            height: 1,
+            previous_hash: "FLEUR_GENESIS_V1".to_string(),
+            transactions: vec![
+                make_signed(0, "flr_first", 10),
+                make_signed(1, "flr_second", 20),
+            ],
+        };
+        let response = handle_rpc(
+            State(shared.clone()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "fleur_submitBlock",
+                "params": { "block": block }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["height"], 1);
+        let chain = shared.lock().unwrap();
+        assert_eq!(chain.chain.ledger.balance("flr_first"), 10);
+        assert_eq!(chain.chain.ledger.balance("flr_second"), 20);
+        assert_eq!(chain.chain.ledger.balance(&sender), 68);
+        assert_eq!(chain.chain.ledger.total_fees, 2);
+        drop(chain);
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
