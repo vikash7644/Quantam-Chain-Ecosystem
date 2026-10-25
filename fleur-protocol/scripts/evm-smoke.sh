@@ -19,6 +19,7 @@ trap cleanup EXIT INT TERM
 
 FLEUR_RPC_ADDR="127.0.0.1:$PORT" \
 FLEUR_JOURNAL="$TMP_DIR/fleur-chain.jsonl" \
+FLEUR_EVM_JOURNAL="$TMP_DIR/fleur-evm.jsonl" \
   cargo run --release --bin node >"$TMP_DIR/node.log" 2>&1 &
 PID=$!
 
@@ -49,7 +50,7 @@ fi
 
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmSandboxDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
   >"$TMP_DIR/evm.json"
 
 if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm.json"; then
