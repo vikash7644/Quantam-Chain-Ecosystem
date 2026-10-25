@@ -43,6 +43,12 @@ cargo test --all-targets
 cargo build --release
 ```
 
+A one-command verification script is also available:
+
+```sh
+sh scripts/verify.sh
+```
+
 Run the demo binary:
 
 ```sh
