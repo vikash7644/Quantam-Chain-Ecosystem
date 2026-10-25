@@ -56,6 +56,29 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
     let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
 
     match method {
+        "eth_chainId" => {
+            // A development-only chain ID for tooling smoke tests. Operators may
+            // override it with a decimal FLEUR_CHAIN_ID value.
+            let chain_id = env::var("FLEUR_CHAIN_ID")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(61800);
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": format!("0x{chain_id:x}")
+            }))
+        }
+        "eth_blockNumber" => {
+            let Ok(chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": format!("0x{:x}", chain.chain.tip_height)
+            }))
+        }
         "fleur_chainStatus" => {
             let Ok(chain) = chain.lock() else {
                 return rpc_error(id, -32603, "Chain state lock poisoned");
