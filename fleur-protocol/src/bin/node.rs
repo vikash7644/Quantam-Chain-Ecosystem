@@ -134,7 +134,11 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             let journal_path = env::var_os("FLEUR_EVM_JOURNAL")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("./data/fleur-evm.jsonl"));
-            match fleur_protocol::evm::persistent_deploy_and_call(journal_path, init_code, call_data) {
+            match fleur_protocol::evm::persistent_deploy_and_call(
+                journal_path,
+                init_code,
+                call_data,
+            ) {
                 Ok(report) => Json(json!({
                     "jsonrpc": "2.0",
                     "id": id,
