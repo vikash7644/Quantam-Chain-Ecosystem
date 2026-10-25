@@ -344,4 +344,41 @@ mod tests {
         .await;
         assert_eq!(response.0["error"]["code"], -32602);
     }
+
+    #[tokio::test]
+    async fn evm_sandbox_rpc_deploys_and_calls_contract() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "fleur_evmSandboxDeployAndCall",
+                "params": {
+                    "initCode": "0x600a600c600039600a6000f3602a60005260206000f3"
+                }
+            })),
+        )
+        .await;
+
+        assert_eq!(response.0["result"]["mode"], "isolated-in-memory-sandbox");
+        assert!(response.0["result"]["contractAddress"]
+            .as_str()
+            .is_some_and(|address| address.starts_with("0x")));
+        assert_eq!(
+            response.0["result"]["returnData"],
+            format!("{:064x}", 42)
+        );
+        assert!(
+            response.0["result"]["deploymentGasUsed"]
+                .as_str()
+                .and_then(|gas| gas.parse::<u64>().ok())
+                .is_some_and(|gas| gas > 0)
+        );
+        assert!(
+            response.0["result"]["callGasUsed"]
+                .as_str()
+                .and_then(|gas| gas.parse::<u64>().ok())
+                .is_some_and(|gas| gas > 0)
+        );
+    }
 }
