@@ -153,7 +153,10 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 "result": {
                     "height": chain.chain.tip_height,
                     "blockHash": chain.chain.tip_hash,
-                    "totalFees": chain.chain.ledger.total_fees.to_string()
+                    "totalFees": chain.chain.ledger.total_fees.to_string(),
+                    "totalFeesAsset": "BVRX",
+                    "totalFeesUnit": "base-unit",
+                    "totalFeesEncoding": "decimal-string"
                 }
             }))
         }
@@ -434,7 +437,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[tokio::test]
     async fn balance_rpc_labels_amount_as_bvrx_base_units() {
         let response = handle_rpc(
             State(test_chain()),
@@ -467,6 +469,10 @@ mod tests {
         .await;
         assert_eq!(response.0["result"]["height"], 0);
         assert_eq!(response.0["result"]["blockHash"], "FLEUR_GENESIS_V1");
+        assert_eq!(response.0["result"]["totalFees"], "0");
+        assert_eq!(response.0["result"]["totalFeesAsset"], "BVRX");
+        assert_eq!(response.0["result"]["totalFeesUnit"], "base-unit");
+        assert_eq!(response.0["result"]["totalFeesEncoding"], "decimal-string");
     }
 
     #[tokio::test]
