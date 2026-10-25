@@ -4,6 +4,11 @@
 //! deployments/calls across requests and restarts, but it is not part of block
 //! validation, the ledger, consensus, or an atomic persistent state database.
 
+const MAX_EVM_JOURNAL_BYTES: usize = 16 * 1024 * 1024;
+const MAX_EVM_OPERATIONS: usize = 10_000;
+const MAX_EVM_CODE_BYTES: usize = 1024 * 1024;
+const MAX_EVM_CALL_DATA_BYTES: usize = 1024 * 1024;
+
 use revm::{
     context::{Context, TxEnv},
     context_interface::result::{ExecutionResult, Output},
@@ -157,6 +162,9 @@ fn persist_evm_operation(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(format!("cannot read EVM journal: {error}")),
     };
+    if contents.len() > MAX_EVM_JOURNAL_BYTES {
+        return Err(format!("EVM journal exceeds the {MAX_EVM_JOURNAL_BYTES}-byte limit"));
+    }
     let mut operations = Vec::new();
     for (index, line) in contents.lines().enumerate() {
         if line.trim().is_empty() {
@@ -166,6 +174,9 @@ fn persist_evm_operation(
             .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
         validate_operation(&prior)
             .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
+        if operations.len() >= MAX_EVM_OPERATIONS {
+            return Err(format!("EVM journal exceeds the {MAX_EVM_OPERATIONS}-operation limit"));
+        }
         operations.push(prior);
     }
     validate_operation(&operation)?;
@@ -198,6 +209,12 @@ fn persist_evm_operation(
 }
 
 fn validate_operation(operation: &EvmOperation) -> Result<(), String> {
+    if operation.init_code.len() > MAX_EVM_CODE_BYTES {
+        return Err(format!("EVM init code exceeds the {MAX_EVM_CODE_BYTES}-byte limit"));
+    }
+    if operation.call_data.len() > MAX_EVM_CALL_DATA_BYTES {
+        return Err(format!("EVM call data exceeds the {MAX_EVM_CALL_DATA_BYTES}-byte limit"));
+    }
     match operation.kind {
         EvmOperationKind::DeployAndCall if operation.init_code.is_empty() => {
             Err("deployment init code must not be empty".to_string())
@@ -458,6 +475,21 @@ mod tests {
         assert_eq!(called.deployment_gas_used, 0);
         assert!(called.call_gas_used > 0);
         assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 2);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn oversized_evm_input_is_rejected_without_creating_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-oversized-input-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let oversized_code = vec![0u8; MAX_EVM_CODE_BYTES + 1];
+        let result = persistent_deploy_and_call(&path, oversized_code, Vec::new());
+
+        assert!(result.is_err(), "oversized init code must be rejected");
+        assert!(!path.exists(), "rejected input must not create a journal");
         let _ = std::fs::remove_file(path);
     }
 
