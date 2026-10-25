@@ -18,6 +18,16 @@ fn parse_chain_id(value: &str) -> Result<u64, std::num::ParseIntError> {
     value.parse::<u64>()
 }
 
+fn build_genesis(address: String, balance: u128) -> Result<LedgerState, &'static str> {
+    if address.is_empty() {
+        if balance != 0 {
+            return Err("FLEUR_GENESIS_BALANCE requires FLEUR_GENESIS_ADDRESS");
+        }
+        return Ok(LedgerState::default());
+    }
+    Ok(LedgerState::with_genesis([(address, balance)]))
+}
+
 #[tokio::main]
 async fn main() {
     let journal_path = env::var_os("FLEUR_JOURNAL")
@@ -30,11 +40,8 @@ async fn main() {
         Err(env::VarError::NotPresent) => 0,
         Err(error) => panic!("Unable to read FLEUR_GENESIS_BALANCE: {error}"),
     };
-    let genesis = if genesis_address.is_empty() {
-        LedgerState::default()
-    } else {
-        LedgerState::with_genesis([(genesis_address, genesis_balance)])
-    };
+    let genesis = build_genesis(genesis_address, genesis_balance)
+        .expect("invalid genesis configuration");
     let chain = PersistentChain::open(&journal_path, genesis, "FLEUR_GENESIS_V1")
         .expect("journal must replay successfully");
     let shared = Arc::new(Mutex::new(chain));
@@ -620,6 +627,13 @@ mod tests {
             assert_eq!(chain.chain.ledger.balance("flr_target"), 0);
         }
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn genesis_configuration_rejects_funded_balance_without_address() {
+        assert!(build_genesis(String::new(), 1).is_err());
+        assert!(build_genesis(String::new(), 0).is_ok());
+        assert!(build_genesis("flr_genesis".to_string(), 1).is_ok());
     }
 
     #[test]
