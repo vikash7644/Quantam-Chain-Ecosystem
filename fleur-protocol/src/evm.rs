@@ -433,6 +433,33 @@ mod tests {
     }
 
     #[test]
+    fn persistent_journal_can_call_an_existing_contract() {
+        let path = std::env::temp_dir()
+            .join(format!("fleur-evm-call-existing-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let init_code = vec![
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+        ];
+
+        let deployed =
+            persistent_deploy_and_call(&path, init_code, Vec::new()).expect("deploy contract");
+        let called = persistent_call_contract(
+            &path,
+            deployed.contract_address.clone(),
+            Vec::new(),
+        )
+        .expect("call existing contract through replayed EVM state");
+
+        assert_eq!(called.contract_address, deployed.contract_address);
+        assert_eq!(called.return_data, format!("{:064x}", 42));
+        assert_eq!(called.deployment_gas_used, 0);
+        assert!(called.call_gas_used > 0);
+        assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 2);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn deployment_and_call_report_gas_and_return_data() {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
