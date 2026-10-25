@@ -214,9 +214,13 @@ fn validate_operation(operation: &EvmOperation) -> Result<(), String> {
 }
 
 fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionReport>, String> {
+    use std::collections::BTreeSet;
+
     let context = Context::mainnet().with_db(CacheDB::<EmptyDB>::default());
     let mut evm = context.build_mainnet();
     let mut nonce = 0u64;
+    // Only addresses created by earlier journal deployments may be called.
+    let mut deployed_contracts = BTreeSet::new();
     let mut reports = Vec::with_capacity(operations.len());
 
     for operation in operations {
@@ -240,6 +244,7 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                     } => address,
                     other => return Err(format!("contract deployment did not succeed: {other:?}")),
                 };
+                deployed_contracts.insert(format!("{address:#x}"));
                 nonce = nonce
                     .checked_add(1)
                     .ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
@@ -249,7 +254,11 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                 let address = operation.contract_address.as_deref().ok_or_else(|| {
                     "existing-contract call requires contract address".to_string()
                 })?;
-                (parse_address(address)?, 0)
+                let parsed = parse_address(address)?;
+                if !deployed_contracts.contains(&format!("{parsed:#x}")) {
+                    return Err("existing-contract call targets an address not deployed in this journal".to_string());
+                }
+                (parsed, 0)
             }
         };
 
@@ -449,6 +458,34 @@ mod tests {
         assert_eq!(called.deployment_gas_used, 0);
         assert!(called.call_gas_used > 0);
         assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 2);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn call_to_unknown_contract_does_not_append_to_evm_journal() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-unknown-contract-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let init_code = vec![
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+        ];
+        persistent_deploy_and_call(&path, init_code, Vec::new()).expect("initial deploy");
+        let before = std::fs::read_to_string(&path).expect("read initial journal");
+        let result = persistent_call_contract(
+            &path,
+            "0x0000000000000000000000000000000000001234".to_string(),
+            Vec::new(),
+        );
+
+        assert!(result.is_err(), "unknown contract addresses must be rejected");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read journal after rejection"),
+            before,
+            "rejected call must not append to the journal"
+        );
         let _ = std::fs::remove_file(path);
     }
 
