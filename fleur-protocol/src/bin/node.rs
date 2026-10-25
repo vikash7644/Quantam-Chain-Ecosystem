@@ -221,6 +221,61 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+
+    #[tokio::test]
+    async fn invalid_signature_rpc_is_rejected_without_advancing_chain() {
+        let path = std::env::temp_dir()
+            .join(format!("fleur-rpc-invalid-{}.jsonl", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let chain = PersistentChain::open(&path, LedgerState::default(), "FLEUR_GENESIS_V1")
+            .expect("open test journal");
+        let shared = Arc::new(Mutex::new(chain));
+        let forged = SignedTransaction {
+            transaction: fleur_protocol::Transaction {
+                sender: "flr_forged".to_string(),
+                recipient: "flr_target".to_string(),
+                amount: 10,
+                fee: 1,
+                nonce: 0,
+            },
+            public_key: "00".repeat(32),
+            signature: "00".repeat(64),
+        };
+
+        let response = handle_rpc(
+            State(shared.clone()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "fleur_submitTransaction",
+                "params": { "signedTransaction": forged }
+            })),
+        )
+        .await;
+
+        assert_eq!(response.0["error"]["code"], -32000);
+        {
+            let chain = shared.lock().unwrap();
+            assert_eq!(chain.chain.tip_height, 0);
+            assert_eq!(chain.chain.ledger.balance("flr_target"), 0);
+        }
+        assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn invalid_json_rpc_version_is_rejected() {
+        let response = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "1.0",
+                "id": 5,
+                "method": "fleur_chainStatus"
+            })),
+        )
+        .await;
+        assert_eq!(response.0["error"]["code"], -32600);
+    }
+
     #[tokio::test]
     async fn unknown_rpc_method_returns_method_not_found() {
         let response = handle_rpc(
