@@ -78,23 +78,76 @@ pub fn deploy_and_call(
     }
 }
 
+/// Kind of command stored in the replay journal.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+enum EvmOperationKind {
+    #[default]
+    DeployAndCall,
+    CallExisting,
+}
+
 /// One accepted EVM command stored in the replay journal.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct EvmOperation {
+    #[serde(default)]
+    kind: EvmOperationKind,
+    #[serde(default)]
     init_code: Vec<u8>,
+    #[serde(default)]
+    contract_address: Option<String>,
+    #[serde(default)]
     call_data: Vec<u8>,
 }
 
-/// Execute and append a deployment/call operation to a deterministic command journal.
+/// Execute a deployment followed by a call and append it to the command journal.
 ///
-/// The journal stores commands, not a serialized database snapshot. Each request
-/// replays all prior operations in order, then appends the new operation only after
-/// successful execution. This is an MVP persistence bridge; it is not yet part of
-/// Fleur block validation or ledger gas settlement.
+/// The journal stores commands, not a serialized database snapshot. Every request
+/// replays the command sequence against one EVM instance before appending the new
+/// operation. This is still separate from Fleur block validation and gas settlement.
 pub fn persistent_deploy_and_call(
     journal_path: impl AsRef<std::path::Path>,
     init_code: Vec<u8>,
     call_data: Vec<u8>,
+) -> Result<EvmExecutionReport, String> {
+    if init_code.is_empty() {
+        return Err("init code must not be empty".to_string());
+    }
+    persist_evm_operation(
+        journal_path,
+        EvmOperation {
+            kind: EvmOperationKind::DeployAndCall,
+            init_code,
+            contract_address: None,
+            call_data,
+        },
+    )
+}
+
+/// Call an already deployed contract address by replaying the journal first.
+///
+/// The contract address must refer to a contract deployed by an earlier journal
+/// operation. State changes are retained in the command sequence across requests
+/// and restarts, but are not yet committed as part of Fleur blocks.
+pub fn persistent_call_contract(
+    journal_path: impl AsRef<std::path::Path>,
+    contract_address: String,
+    call_data: Vec<u8>,
+) -> Result<EvmExecutionReport, String> {
+    parse_address(&contract_address)?;
+    persist_evm_operation(
+        journal_path,
+        EvmOperation {
+            kind: EvmOperationKind::CallExisting,
+            init_code: Vec::new(),
+            contract_address: Some(contract_address),
+            call_data,
+        },
+    )
+}
+
+fn persist_evm_operation(
+    journal_path: impl AsRef<std::path::Path>,
+    operation: EvmOperation,
 ) -> Result<EvmExecutionReport, String> {
     use std::io::Write;
 
@@ -109,25 +162,14 @@ pub fn persistent_deploy_and_call(
         if line.trim().is_empty() {
             continue;
         }
-        let operation: EvmOperation = serde_json::from_str(line)
+        let prior: EvmOperation = serde_json::from_str(line)
             .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
-        if operation.init_code.is_empty() {
-            return Err(format!(
-                "invalid EVM journal line {}: empty init code",
-                index + 1
-            ));
-        }
-        operations.push(operation);
+        validate_operation(&prior)
+            .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
+        operations.push(prior);
     }
-
-    let operation = EvmOperation {
-        init_code,
-        call_data,
-    };
-    if operation.init_code.is_empty() {
-        return Err("init code must not be empty".to_string());
-    }
-    let mut candidate = operations.clone();
+    validate_operation(&operation)?;
+    let mut candidate = operations;
     candidate.push(operation.clone());
     let reports = execute_operations(&candidate)?;
     let report = reports
@@ -155,34 +197,66 @@ pub fn persistent_deploy_and_call(
     Ok(report)
 }
 
+fn validate_operation(operation: &EvmOperation) -> Result<(), String> {
+    match operation.kind {
+        EvmOperationKind::DeployAndCall if operation.init_code.is_empty() => {
+            Err("deployment init code must not be empty".to_string())
+        }
+        EvmOperationKind::DeployAndCall => Ok(()),
+        EvmOperationKind::CallExisting => {
+            let address = operation
+                .contract_address
+                .as_deref()
+                .ok_or_else(|| "existing-contract call requires contract address".to_string())?;
+            parse_address(address).map(|_| ())
+        }
+    }
+}
+
 fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionReport>, String> {
+    use revm::primitives::Address;
+
     let context = Context::mainnet().with_db(CacheDB::<EmptyDB>::default());
     let mut evm = context.build_mainnet();
     let mut nonce = 0u64;
     let mut reports = Vec::with_capacity(operations.len());
 
     for operation in operations {
-        let creation = evm
-            .transact_commit(
-                TxEnv::builder()
-                    .kind(TxKind::Create)
-                    .data(Bytes::from(operation.init_code.clone()))
-                    .nonce(nonce)
-                    .build()
-                    .map_err(|error| format!("invalid create transaction: {error:?}"))?,
-            )
-            .map_err(|error| format!("contract deployment failed: {error:?}"))?;
-        let deployment_gas_used = creation.gas_used();
-        let contract_address = match creation {
-            ExecutionResult::Success {
-                output: Output::Create(_, Some(address)),
-                ..
-            } => address,
-            other => return Err(format!("contract deployment did not succeed: {other:?}")),
+        let (contract_address, deployment_gas_used) = match operation.kind {
+            EvmOperationKind::DeployAndCall => {
+                let creation = evm
+                    .transact_commit(
+                        TxEnv::builder()
+                            .kind(TxKind::Create)
+                            .data(Bytes::from(operation.init_code.clone()))
+                            .nonce(nonce)
+                            .build()
+                            .map_err(|error| format!("invalid create transaction: {error:?}"))?,
+                    )
+                    .map_err(|error| format!("contract deployment failed: {error:?}"))?;
+                let gas_used = creation.gas_used();
+                let address = match creation {
+                    ExecutionResult::Success {
+                        output: Output::Create(_, Some(address)),
+                        ..
+                    } => address,
+                    other => {
+                        return Err(format!("contract deployment did not succeed: {other:?}"))
+                    }
+                };
+                nonce = nonce
+                    .checked_add(1)
+                    .ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
+                (address, gas_used)
+            }
+            EvmOperationKind::CallExisting => {
+                let address = operation
+                    .contract_address
+                    .as_deref()
+                    .ok_or_else(|| "existing-contract call requires contract address".to_string())?;
+                (parse_address(address)?, 0)
+            }
         };
-        nonce = nonce
-            .checked_add(1)
-            .ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
 
         let call = evm
             .transact_commit(
@@ -213,6 +287,25 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
         });
     }
     Ok(reports)
+}
+
+fn parse_address(value: &str) -> Result<revm::primitives::Address, String> {
+    let bytes = decode_hex(value).map_err(|_| "contract address must be hex".to_string())?;
+    if bytes.len() != 20 {
+        return Err("contract address must contain exactly 20 bytes".to_string());
+    }
+    Ok(revm::primitives::Address::from_slice(&bytes))
+}
+
+fn decode_hex(input: &str) -> Result<Vec<u8>, ()> {
+    let input = input.strip_prefix("0x").unwrap_or(input);
+    if input.len() % 2 != 0 {
+        return Err(());
+    }
+    (0..input.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&input[index..index + 2], 16).map_err(|_| ()))
+        .collect()
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
