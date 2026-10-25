@@ -1,7 +1,8 @@
 //! Isolated REVM execution support for Fleur's EVM compatibility target.
 //!
-//! Execution currently runs in a fresh in-memory sandbox. It is not connected to
-//! block validation, the ledger, consensus, or persistent contract storage.
+//! The sandbox API is stateless. A separate JSONL command journal can replay EVM
+//! deployments/calls across requests and restarts, but it is not part of block
+//! validation, the ledger, consensus, or an atomic persistent state database.
 
 use revm::{
     context::{Context, TxEnv},
