@@ -48,6 +48,13 @@ if [ "$READY" -ne 1 ]; then
   exit 1
 fi
 
+curl -fsS "http://127.0.0.1:$PORT/health" >"$TMP_DIR/health.json"
+if ! grep -q '"status":"ok"' "$TMP_DIR/health.json"; then
+  cat "$TMP_DIR/health.json"
+  echo "Node health endpoint did not report ok." >&2
+  exit 1
+fi
+
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":10,"method":"eth_chainId"}' \
