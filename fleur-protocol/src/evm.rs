@@ -42,12 +42,12 @@ pub fn deploy_and_call(
         )
         .map_err(|error| format!("contract deployment failed: {error:?}"))?;
 
-    let (contract_address, deployment_gas_used) = match creation {
+    let deployment_gas_used = creation.gas_used();
+    let contract_address = match creation {
         ExecutionResult::Success {
             output: Output::Create(_, Some(address)),
-            gas_used,
             ..
-        } => (address, gas_used),
+        } => address,
         other => return Err(format!("contract deployment did not succeed: {other:?}")),
     };
 
@@ -62,10 +62,10 @@ pub fn deploy_and_call(
         )
         .map_err(|error| format!("contract call failed: {error:?}"))?;
 
+    let call_gas_used = call.gas_used();
     match call {
         ExecutionResult::Success {
             output: Output::Call(output),
-            gas_used: call_gas_used,
             ..
         } => Ok(EvmExecutionReport {
             contract_address: format!("{contract_address:#x}"),
