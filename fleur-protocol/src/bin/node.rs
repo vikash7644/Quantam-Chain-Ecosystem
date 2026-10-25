@@ -219,7 +219,13 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             Json(json!({
                 "jsonrpc": "2.0",
                 "id": id,
-                "result": { "address": address, "balance": chain.chain.ledger.balance(address).to_string() }
+                "result": {
+                    "address": address,
+                    "balance": chain.chain.ledger.balance(address).to_string(),
+                    "asset": "BVRX",
+                    "unit": "base-unit",
+                    "amountEncoding": "decimal-string"
+                }
             }))
         }
         "fleur_submitBlock" => {
