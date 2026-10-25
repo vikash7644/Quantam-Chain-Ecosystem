@@ -202,7 +202,9 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
             } => hex_encode(&output),
             other => return Err(format!("contract call did not succeed: {other:?}")),
         };
-        nonce = nonce.checked_add(1).ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
+        nonce = nonce
+            .checked_add(1)
+            .ok_or_else(|| "EVM transaction nonce overflow".to_string())?;
         reports.push(EvmExecutionReport {
             contract_address: format!("{contract_address:#x}"),
             deployment_gas_used,
