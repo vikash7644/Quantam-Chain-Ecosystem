@@ -79,6 +79,24 @@ if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000
   exit 1
 fi
 
+ADDRESS=$(sed -n 's/.*"contractAddress":"\\([^"]*\\)".*/\\1/p' "$TMP_DIR/evm.json")
+if [ -z "$ADDRESS" ]; then
+  cat "$TMP_DIR/evm.json"
+  echo "EVM smoke test failed: deployment response did not include contract address." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"fleur_evmPersistentCall\",\"params\":{\"contractAddress\":\"$ADDRESS\"}}" \
+  >"$TMP_DIR/evm-existing-call.json"
+
+if ! grep -q '"returnData":"000000000000000000000000000000000000000000000000000000000000002a"' "$TMP_DIR/evm-existing-call.json"; then
+  cat "$TMP_DIR/evm-existing-call.json"
+  echo "EVM existing-contract call failed: expected return value 42." >&2
+  exit 1
+fi
+
 curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":3,"method":"fleur_evmPersistentDeployAndCall","params":{"initCode":"0x600a600c600039600a6000f3602a60005260206000f3"}}' \
@@ -91,8 +109,8 @@ if ! grep -q '"returnData":"0000000000000000000000000000000000000000000000000000
 fi
 
 LINES=$(wc -l < "$TMP_DIR/fleur-evm.jsonl" | tr -d ' ')
-if [ "$LINES" -ne 2 ]; then
-  echo "EVM journal should contain two committed commands; found $LINES." >&2
+if [ "$LINES" -ne 3 ]; then
+  echo "EVM journal should contain three replayable commands; found $LINES." >&2
   exit 1
 fi
 
