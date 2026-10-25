@@ -43,7 +43,7 @@ pub fn deploy_and_call(
         )
         .map_err(|error| format!("contract deployment failed: {error:?}"))?;
 
-    let deployment_gas_used = creation.gas_used();
+    let deployment_gas_used = creation.tx_gas_used();
     let contract_address = match creation {
         ExecutionResult::Success {
             output: Output::Create(_, Some(address)),
@@ -63,7 +63,7 @@ pub fn deploy_and_call(
         )
         .map_err(|error| format!("contract call failed: {error:?}"))?;
 
-    let call_gas_used = call.gas_used();
+    let call_gas_used = call.tx_gas_used();
     match call {
         ExecutionResult::Success {
             output: Output::Call(output),
@@ -214,8 +214,6 @@ fn validate_operation(operation: &EvmOperation) -> Result<(), String> {
 }
 
 fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionReport>, String> {
-    use revm::primitives::Address;
-
     let context = Context::mainnet().with_db(CacheDB::<EmptyDB>::default());
     let mut evm = context.build_mainnet();
     let mut nonce = 0u64;
@@ -234,7 +232,7 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                             .map_err(|error| format!("invalid create transaction: {error:?}"))?,
                     )
                     .map_err(|error| format!("contract deployment failed: {error:?}"))?;
-                let gas_used = creation.gas_used();
+                let gas_used = creation.tx_gas_used();
                 let address = match creation {
                     ExecutionResult::Success {
                         output: Output::Create(_, Some(address)),
@@ -265,7 +263,7 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                     .map_err(|error| format!("invalid call transaction: {error:?}"))?,
             )
             .map_err(|error| format!("contract call failed: {error:?}"))?;
-        let call_gas_used = call.gas_used();
+        let call_gas_used = call.tx_gas_used();
         let return_data = match call {
             ExecutionResult::Success {
                 output: Output::Call(output),
