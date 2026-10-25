@@ -455,6 +455,33 @@ mod tests {
     }
 
     #[test]
+    fn persistent_calls_preserve_contract_storage_across_replay() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-evm-storage-replay-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        // Runtime increments storage slot zero and returns the new value.
+        let init_code = vec![
+            0x60, 0x0e, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0e, 0x60, 0x00, 0xf3,
+            0x5f, 0x54, 0x60, 0x01, 0x01, 0x80, 0x5f, 0x55, 0x5f, 0x52, 0x60, 0x20, 0x5f, 0xf3,
+        ];
+
+        let first = persistent_deploy_and_call(&path, init_code, Vec::new())
+            .expect("deploy and execute incrementing contract");
+        assert_eq!(first.return_data, format!("{:064x}", 1));
+        let second = persistent_call_contract(&path, first.contract_address.clone(), Vec::new())
+            .expect("second call should replay and retain storage");
+        assert_eq!(second.return_data, format!("{:064x}", 2));
+        let third = persistent_call_contract(&path, first.contract_address.clone(), Vec::new())
+            .expect("third call should replay and retain storage");
+        assert_eq!(third.return_data, format!("{:064x}", 3));
+        assert_eq!(third.contract_address, first.contract_address);
+        assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 3);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn deployment_and_call_report_gas_and_return_data() {
         // Init code returns runtime bytecode: PUSH1 0x2a PUSH1 0 MSTORE
         // PUSH1 0x20 PUSH1 0 RETURN.
