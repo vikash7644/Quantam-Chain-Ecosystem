@@ -2,7 +2,8 @@
 
 Fleur Network is an independent blockchain protocol project. It is not a
 Solana fork and shares no source files with Zenvora Lang. The selected smart
-contract target is Solidity/EVM only; an isolated REVM execution smoke test exists, but EVM is not integrated into chain state transitions or RPC yet.
+contract target is Solidity/EVM only. A REVM-backed sandbox method is exposed over RPC,
+but it does not share state with the persistent ledger.
 
 ## Implemented in this development slice
 
@@ -14,15 +15,17 @@ contract target is Solidity/EVM only; an isolated REVM execution smoke test exis
 - Append-only JSONL journal with validation and deterministic replay on restart.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
   and `fleur_submitTransaction`.
-- A pinned REVM 43.0.3 smoke test that deploys bytecode and verifies contract storage execution in an isolated in-memory EVM.
+- A pinned REVM 43.0.3 execution sandbox that deploys init bytecode, calls the resulting contract, and reports gas used and return data; each request uses a fresh in-memory EVM.
 - GitHub Actions checks for formatting, tests, and a release build.
 
 ## Not public-testnet ready
 
 This is a development scaffold, **not a public testnet**. There is no distributed
-consensus or peer-to-peer networking. REVM currently runs only in an isolated test;
-Fleur RPC does not yet expose Solidity contract deployment/calls, and EVM state is
-not connected to the persistent ledger. The JSONL journal is an MVP persistence layer, not a
+consensus or peer-to-peer networking. `fleur_evmSandboxDeployAndCall` runs init bytecode
+and calls the resulting contract in a fresh in-memory EVM, but this sandbox does not
+share state with the persistent ledger, does not persist deployed contracts, and is not
+a production Ethereum-compatible transaction path. Ethereum account/signature handling
+and EVM gas settlement are not integrated with ledger transactions. The JSONL journal is an MVP persistence layer, not a
 production database. RPC transaction submission currently seals one accepted
 transaction per block; there is no transaction mempool or production ordering.
 The demo binary uses a deterministic test key and must never be used with real
@@ -74,8 +77,8 @@ curl -s http://127.0.0.1:8545/rpc \
 3. Block validation and parent continuity.
 4. Append-only journal and replay validation.
 5. Single-node RPC.
-6. Integrate a real EVM engine and add compatibility tests.
-7. Add Solidity contract deploy/call path.
+6. Integrate the REVM engine with an isolated deploy/call sandbox and add compatibility tests.
+7. Connect EVM state, transaction validation, gas settlement, and rollback to chain blocks.
 8. Multi-node synchronization and adversarial tests.
 9. End-to-end testnet scripts and explorer-facing APIs.
 10. CI evidence, operational docs, and limitations report.
