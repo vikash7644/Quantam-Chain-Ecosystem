@@ -364,21 +364,14 @@ mod tests {
         assert!(response.0["result"]["contractAddress"]
             .as_str()
             .is_some_and(|address| address.starts_with("0x")));
-        assert_eq!(
-            response.0["result"]["returnData"],
-            format!("{:064x}", 42)
-        );
-        assert!(
-            response.0["result"]["deploymentGasUsed"]
-                .as_str()
-                .and_then(|gas| gas.parse::<u64>().ok())
-                .is_some_and(|gas| gas > 0)
-        );
-        assert!(
-            response.0["result"]["callGasUsed"]
-                .as_str()
-                .and_then(|gas| gas.parse::<u64>().ok())
-                .is_some_and(|gas| gas > 0)
-        );
+        assert_eq!(response.0["result"]["returnData"], format!("{:064x}", 42));
+        assert!(response.0["result"]["deploymentGasUsed"]
+            .as_str()
+            .and_then(|gas| gas.parse::<u64>().ok())
+            .is_some_and(|gas| gas > 0));
+        assert!(response.0["result"]["callGasUsed"]
+            .as_str()
+            .and_then(|gas| gas.parse::<u64>().ok())
+            .is_some_and(|gas| gas > 0));
     }
 }
