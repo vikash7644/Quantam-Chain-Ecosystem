@@ -111,6 +111,44 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 Err(error) => rpc_error(id, -32000, &format!("{error:?}")),
             }
         }
+        "fleur_evmPersistentDeployAndCall" => {
+            let Some(init_code) = params.get("initCode").and_then(Value::as_str) else {
+                return rpc_error(id, -32602, "params.initCode must be a hex string");
+            };
+            let init_code = match decode_hex(init_code) {
+                Ok(bytes) if !bytes.is_empty() => bytes,
+                _ => return rpc_error(id, -32602, "params.initCode must be non-empty valid hex"),
+            };
+            let call_data = match params.get("callData").and_then(Value::as_str) {
+                Some(encoded) => match decode_hex(encoded) {
+                    Ok(bytes) => bytes,
+                    Err(_) => return rpc_error(id, -32602, "params.callData must be valid hex"),
+                },
+                None => Vec::new(),
+            };
+            // Serialize EVM journal updates with other node operations. The EVM journal
+            // is durable/replayable but is not yet part of block consensus or gas settlement.
+            let Ok(_chain_guard) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            let journal_path = env::var_os("FLEUR_EVM_JOURNAL")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("./data/fleur-evm.jsonl"));
+            match fleur_protocol::evm::persistent_deploy_and_call(journal_path, init_code, call_data) {
+                Ok(report) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "mode": "persistent-command-replay",
+                        "contractAddress": report.contract_address,
+                        "deploymentGasUsed": report.deployment_gas_used.to_string(),
+                        "callGasUsed": report.call_gas_used.to_string(),
+                        "returnData": report.return_data
+                    }
+                })),
+                Err(error) => rpc_error(id, -32011, &error),
+            }
+        }
         "fleur_evmSandboxDeployAndCall" => {
             let Some(init_code) = params.get("initCode").and_then(Value::as_str) else {
                 return rpc_error(id, -32602, "params.initCode must be a hex string");
