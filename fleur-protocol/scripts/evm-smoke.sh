@@ -48,6 +48,29 @@ if [ "$READY" -ne 1 ]; then
   exit 1
 fi
 
+# Verify BVRX is clearly labeled as a planned development asset and that
+# accumulated fees use the same explicit base-unit encoding.
+if ! grep -q '"totalFees":"0"' "$TMP_DIR/status.json" ||
+   ! grep -q '"totalFeesAsset":"BVRX"' "$TMP_DIR/status.json" ||
+   ! grep -q '"totalFeesUnit":"base-unit"' "$TMP_DIR/status.json" ||
+   ! grep -q '"totalFeesEncoding":"decimal-string"' "$TMP_DIR/status.json"; then
+  cat "$TMP_DIR/status.json"
+  echo "Chain status did not expose explicit BVRX fee metadata." >&2
+  exit 1
+fi
+
+curl -fsS "http://127.0.0.1:$PORT/rpc" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":14,"method":"fleur_nativeCoin"}' \
+  >"$TMP_DIR/native-coin.json"
+if ! grep -q '"symbol":"BVRX"' "$TMP_DIR/native-coin.json" ||
+   ! grep -q '"supplyPolicy":"not-finalized"' "$TMP_DIR/native-coin.json" ||
+   ! grep -q '"networkStatus":"development-only"' "$TMP_DIR/native-coin.json"; then
+  cat "$TMP_DIR/native-coin.json"
+  echo "Native-coin metadata did not preserve development-only caveats." >&2
+  exit 1
+fi
+
 curl -fsS "http://127.0.0.1:$PORT/health" >"$TMP_DIR/health.json"
 if ! grep -q '"status":"ok"' "$TMP_DIR/health.json"; then
   cat "$TMP_DIR/health.json"
