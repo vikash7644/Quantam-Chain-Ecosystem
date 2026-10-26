@@ -477,6 +477,10 @@ mod tests {
         .await;
         assert_eq!(response.0["result"]["height"], 0);
         assert_eq!(response.0["result"]["blockHash"], "FLEUR_GENESIS_V1");
+        assert_eq!(response.0["result"]["issuedSupply"], "0");
+        assert_eq!(response.0["result"]["circulatingSupply"], "0");
+        assert_eq!(response.0["result"]["burnedFees"], "0");
+        assert_eq!(response.0["result"]["supplyInvariantHolds"], true);
         assert_eq!(response.0["result"]["totalFees"], "0");
         assert_eq!(response.0["result"]["totalFeesAsset"], "BVRX");
         assert_eq!(response.0["result"]["totalFeesUnit"], "base-unit");
