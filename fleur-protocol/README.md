@@ -12,7 +12,7 @@ but it does not share state with the persistent ledger.
 - Per-sender sequential nonces to reject replayed transactions.
 - Atomic block application that rejects invalid transactions without partial state changes.
 - SHA-256 block hashes, block-height checks, and parent-hash continuity checks.
-- Append-only JSONL journal with validation and deterministic replay on restart.
+- Append-only JSONL journal with validation and deterministic replay on restart; startup rejects journals larger than 64 MiB or containing more than 100,000 blocks instead of attempting unbounded replay.
 - Operator health endpoint `GET /health` reports service status and current chain height for smoke checks and deployment probes.
 - `fleur_getBalance` returns the balance as a decimal string with `asset: BVRX`, `unit: base-unit`, and `amountEncoding: decimal-string`; no human-facing decimal precision has been finalized.
 - JSON-RPC method `fleur_nativeCoin` identifies the planned BVRX native asset; it explicitly marks the supply policy as not finalized and network status as development-only. This metadata is not evidence of a public launch or integrated gas settlement.
@@ -27,8 +27,7 @@ but it does not share state with the persistent ledger.
 This is a development scaffold, **not a public testnet**. There is no distributed
 consensus or peer-to-peer networking. `fleur_evmSandboxDeployAndCall` runs init bytecode
 and calls the resulting contract in a fresh in-memory EVM, and is not a production Ethereum-compatible transaction path. The separate EVM command journal can replay deployments and calls to existing contract addresses across requests and restarts, but it is not included in chain blocks, has no standard contract-code/storage query methods, and is not an atomic part of block validation. Ethereum account/signature handling
-and EVM gas settlement are not integrated with ledger transactions. The JSONL journal is an MVP persistence layer, not a
-production database. The `/health` endpoint is a process/readiness probe, not a consensus or data-integrity guarantee. `fleur_submitTransaction` currently seals one accepted transaction per block; `fleur_submitBlock` accepts a caller-supplied block and validates it atomically, but there is no transaction mempool, block proposer, or production ordering. `fleur_getBlockByHeight` scans the local JSONL journal for explorer clients; height 0 (genesis) is configuration-defined and is not returned as a persisted block.
+and EVM gas settlement are not integrated with ledger transactions. The canonical JSONL journal is an MVP persistence layer, capped at 64 MiB and 100,000 replayed blocks per startup; it is not a production database. The `/health` endpoint is a process/readiness probe, not a consensus or data-integrity guarantee. `fleur_submitTransaction` currently seals one accepted transaction per block; `fleur_submitBlock` accepts a caller-supplied block and validates it atomically, but there is no transaction mempool, block proposer, or production ordering. `fleur_getBlockByHeight` scans the local JSONL journal for explorer clients; height 0 (genesis) is configuration-defined and is not returned as a persisted block.
 The demo binary uses a deterministic test key and must never be used with real
 funds. Do not expose the development RPC server publicly.
 
@@ -42,20 +41,11 @@ cd fleur-protocol
 cargo fmt --all -- --check
 cargo test --all-targets
 cargo build --release
-```
-
-A one-command verification script is also available:
-
-```sh
 sh scripts/verify.sh
-```
-
-The CI also starts the release node and exercises the EVM JSON-RPC path end to end
-(using `curl`):
-
-```sh
 sh scripts/evm-smoke.sh
 ```
+
+The verification script runs the formatting, test, and release-build checks. The EVM smoke script starts the release node and exercises the EVM JSON-RPC path end to end (using `curl`).
 
 This smoke test confirms the basic Ethereum metadata methods, deployment, a later call
 to the returned contract address, and journal replay across RPC requests. It does **not**
