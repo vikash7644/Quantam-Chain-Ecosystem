@@ -301,7 +301,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(input: &str) -> Result<Vec<u8>, ProtocolError> {
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return Err(ProtocolError::InvalidHex);
     }
     (0..input.len())
