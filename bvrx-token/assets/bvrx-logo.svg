@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BVRX Token emblem</title>
+  <desc id="desc">Angular violet and cyan B mark on a midnight navy background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071126"/><stop offset="1" stop-color="#02050e"/></linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f04bff"/><stop offset=".48" stop-color="#653dff"/><stop offset="1" stop-color="#00e5ff"/></linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="205" fill="none" stroke="#172d58" stroke-width="2"/>
+  <circle cx="256" cy="256" r="185" fill="none" stroke="#1a3d78" stroke-width="2" stroke-dasharray="5 12"/>
+  <path d="M110 133H306L365 192H206L169 229H331L390 288L315 363H103L163 303H289L315 278H142L91 227Z" fill="url(#metal)" filter="url(#glow)"/>
+  <path d="M203 245H331L358 272H231L196 307H319L344 332H183L157 306Z" fill="#071126" opacity=".9"/>
+  <path d="M84 367L196 255L225 284L143 367Z" fill="#00e5ff"/>
+  <text x="256" y="431" fill="#e8edff" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" letter-spacing="8" text-anchor="middle">BVRX</text>
+</svg>
