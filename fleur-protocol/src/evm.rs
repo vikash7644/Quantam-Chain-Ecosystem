@@ -163,7 +163,9 @@ fn persist_evm_operation(
         Err(error) => return Err(format!("cannot read EVM journal: {error}")),
     };
     if contents.len() > MAX_EVM_JOURNAL_BYTES {
-        return Err(format!("EVM journal exceeds the {MAX_EVM_JOURNAL_BYTES}-byte limit"));
+        return Err(format!(
+            "EVM journal exceeds the {MAX_EVM_JOURNAL_BYTES}-byte limit"
+        ));
     }
     let mut operations = Vec::new();
     for (index, line) in contents.lines().enumerate() {
@@ -175,7 +177,9 @@ fn persist_evm_operation(
         validate_operation(&prior)
             .map_err(|error| format!("invalid EVM journal line {}: {error}", index + 1))?;
         if operations.len() >= MAX_EVM_OPERATIONS {
-            return Err(format!("EVM journal exceeds the {MAX_EVM_OPERATIONS}-operation limit"));
+            return Err(format!(
+                "EVM journal exceeds the {MAX_EVM_OPERATIONS}-operation limit"
+            ));
         }
         operations.push(prior);
     }
@@ -210,10 +214,14 @@ fn persist_evm_operation(
 
 fn validate_operation(operation: &EvmOperation) -> Result<(), String> {
     if operation.init_code.len() > MAX_EVM_CODE_BYTES {
-        return Err(format!("EVM init code exceeds the {MAX_EVM_CODE_BYTES}-byte limit"));
+        return Err(format!(
+            "EVM init code exceeds the {MAX_EVM_CODE_BYTES}-byte limit"
+        ));
     }
     if operation.call_data.len() > MAX_EVM_CALL_DATA_BYTES {
-        return Err(format!("EVM call data exceeds the {MAX_EVM_CALL_DATA_BYTES}-byte limit"));
+        return Err(format!(
+            "EVM call data exceeds the {MAX_EVM_CALL_DATA_BYTES}-byte limit"
+        ));
     }
     match operation.kind {
         EvmOperationKind::DeployAndCall if operation.init_code.is_empty() => {
@@ -273,7 +281,10 @@ fn execute_operations(operations: &[EvmOperation]) -> Result<Vec<EvmExecutionRep
                 })?;
                 let parsed = parse_address(address)?;
                 if !deployed_contracts.contains(&format!("{parsed:#x}")) {
-                    return Err("existing-contract call targets an address not deployed in this journal".to_string());
+                    return Err(
+                        "existing-contract call targets an address not deployed in this journal"
+                            .to_string(),
+                    );
                 }
                 (parsed, 0)
             }
@@ -512,7 +523,10 @@ mod tests {
             Vec::new(),
         );
 
-        assert!(result.is_err(), "unknown contract addresses must be rejected");
+        assert!(
+            result.is_err(),
+            "unknown contract addresses must be rejected"
+        );
         assert_eq!(
             std::fs::read_to_string(&path).expect("read journal after rejection"),
             before,
@@ -594,8 +608,8 @@ mod tests {
         std::fs::write(&path, corrupted).expect("write corrupted journal");
 
         let init_code = vec![
-            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3,
-            0x60, 0x2a, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
+            0x60, 0x0a, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x0a, 0x60, 0x00, 0xf3, 0x60, 0x2a,
+            0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
         ];
         let result = persistent_deploy_and_call(&path, init_code, Vec::new());
 
@@ -618,8 +632,8 @@ mod tests {
 
         // Init code returns a runtime that immediately REVERTs.
         let reverting_init_code = vec![
-            0x60, 0x03, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x03, 0x60, 0x00, 0xf3,
-            0x5f, 0x5f, 0xfd,
+            0x60, 0x03, 0x60, 0x0c, 0x60, 0x00, 0x39, 0x60, 0x03, 0x60, 0x00, 0xf3, 0x5f, 0x5f,
+            0xfd,
         ];
         let result = persistent_deploy_and_call(&path, reverting_init_code, Vec::new());
 
