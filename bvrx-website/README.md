@@ -1,6 +1,6 @@
-# BVRX Website
+# Fleur Website
 
-Static, mobile-friendly landing page for the BVRX BEP-20 token project.
+Static, mobile-friendly landing page for Fleur; BVRX is the token symbol.
 
 ## Preview locally
 Open `index.html` in a browser. No build step or package installation is required.
