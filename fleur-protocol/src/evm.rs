@@ -331,7 +331,7 @@ fn parse_address(value: &str) -> Result<revm::primitives::Address, String> {
 
 fn decode_hex(input: &str) -> Result<Vec<u8>, ()> {
     let input = input.strip_prefix("0x").unwrap_or(input);
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return Err(());
     }
     (0..input.len())
