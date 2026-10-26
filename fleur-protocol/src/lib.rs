@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 pub type Address = String;
 pub type Amount = u128;
 
+// Bound startup work and memory when replaying a local journal.
+const MAX_CHAIN_JOURNAL_BYTES: usize = 64 * 1024 * 1024;
+const MAX_CHAIN_BLOCKS: usize = 100_000;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
     pub sender: Address,
@@ -229,9 +233,22 @@ impl PersistentChain {
             Err(error) => return Err(ProtocolError::Io(error.to_string())),
         };
 
+        if journal.len() > MAX_CHAIN_JOURNAL_BYTES {
+            return Err(ProtocolError::JournalTooLarge {
+                limit: MAX_CHAIN_JOURNAL_BYTES,
+                actual: journal.len(),
+            });
+        }
+
+        let mut replayed_blocks = 0usize;
         for (line_index, line) in journal.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
+            }
+            if replayed_blocks >= MAX_CHAIN_BLOCKS {
+                return Err(ProtocolError::TooManyJournalBlocks {
+                    limit: MAX_CHAIN_BLOCKS,
+                });
             }
             let block: Block =
                 serde_json::from_str(line).map_err(|error| ProtocolError::InvalidJournal {
@@ -239,6 +256,7 @@ impl PersistentChain {
                     message: error.to_string(),
                 })?;
             chain.apply_block(&block)?;
+            replayed_blocks += 1;
         }
 
         Ok(Self {
@@ -310,6 +328,8 @@ pub enum ProtocolError {
     BlockHeightOverflow,
     Io(String),
     InvalidJournal { line: usize, message: String },
+    JournalTooLarge { limit: usize, actual: usize },
+    TooManyJournalBlocks { limit: usize },
 }
 
 #[cfg(test)]
@@ -539,6 +559,61 @@ mod tests {
             "startup validation must not rewrite the existing journal"
         );
 
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn oversized_canonical_journal_fails_closed_without_modification() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-oversized-chain-journal-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let oversized = vec![b'x'; MAX_CHAIN_JOURNAL_BYTES + 1];
+        std::fs::write(&path, &oversized).expect("write oversized journal");
+
+        let result = PersistentChain::open(&path, LedgerState::default(), "genesis");
+        assert_eq!(
+            result.err(),
+            Some(ProtocolError::JournalTooLarge {
+                limit: MAX_CHAIN_JOURNAL_BYTES,
+                actual: oversized.len(),
+            })
+        );
+        assert_eq!(
+            std::fs::read(&path).expect("read original journal"),
+            oversized,
+            "startup must not rewrite an oversized journal"
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn too_many_canonical_journal_blocks_are_rejected() {
+        let path = std::env::temp_dir().join(format!(
+            "fleur-too-many-chain-blocks-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let block = Block {
+            height: 1,
+            previous_hash: "genesis".into(),
+            transactions: Vec::new(),
+        };
+        let encoded = serde_json::to_string(&block).unwrap();
+        let journal = (0..=MAX_CHAIN_BLOCKS)
+            .map(|_| encoded.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, &journal).expect("write too many blocks");
+
+        let result = PersistentChain::open(&path, LedgerState::default(), "genesis");
+        assert_eq!(
+            result.err(),
+            Some(ProtocolError::TooManyJournalBlocks {
+                limit: MAX_CHAIN_BLOCKS,
+            })
+        );
         let _ = std::fs::remove_file(path);
     }
 
