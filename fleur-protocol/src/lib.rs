@@ -593,16 +593,23 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&path);
-        let block = Block {
-            height: 1,
-            previous_hash: "genesis".into(),
-            transactions: Vec::new(),
-        };
-        let encoded = serde_json::to_string(&block).unwrap();
-        let journal = (0..=MAX_CHAIN_BLOCKS)
-            .map(|_| encoded.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
+        // The journal must contain valid sequential blocks so replay reaches
+        // the configured block-count limit instead of failing on an earlier
+        // height or parent-hash error.
+        let mut previous_hash = "genesis".to_string();
+        let mut journal = String::new();
+        for height in 1..=MAX_CHAIN_BLOCKS + 1 {
+            let block = Block {
+                height: height as u64,
+                previous_hash: previous_hash.clone(),
+                transactions: Vec::new(),
+            };
+            previous_hash = block.hash().expect("hash generated block");
+            if !journal.is_empty() {
+                journal.push('\n');
+            }
+            journal.push_str(&serde_json::to_string(&block).expect("encode generated block"));
+        }
         std::fs::write(&path, &journal).expect("write too many blocks");
 
         let result = PersistentChain::open(&path, LedgerState::default(), "genesis");
