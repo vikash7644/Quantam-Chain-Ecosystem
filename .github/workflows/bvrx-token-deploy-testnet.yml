@@ -17,13 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: feat/bvrx-bep20-testnet
+          ref: ${{ github.ref }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: bvrx-token/package-lock.json
       - name: Require testnet wallet secret
         env:
           BSC_TESTNET_PRIVATE_KEY: ${{ secrets.BSC_TESTNET_PRIVATE_KEY }}
@@ -33,7 +31,7 @@ jobs:
             exit 1
           fi
       - name: Install dependencies
-        run: npm ci
+        run: npm install
       - name: Compile and test
         run: |
           npm run compile
