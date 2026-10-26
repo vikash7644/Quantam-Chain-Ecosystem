@@ -138,7 +138,9 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                     "assetType": "native",
                     "unit": "base-unit",
                     "amountEncoding": "decimal-string",
-                    "supplyPolicy": "not-finalized",
+                    "supplyPolicy": "genesis-configuration-defined",
+                    "issuanceModel": "genesis-balance-only",
+                    "mintingRpcEnabled": false,
                     "networkStatus": "development-only"
                 }
             }))
