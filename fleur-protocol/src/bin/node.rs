@@ -29,7 +29,8 @@ fn build_genesis(address: String, balance: u128) -> Result<LedgerState, &'static
         }
         return Ok(LedgerState::default());
     }
-    Ok(LedgerState::with_genesis([(address, balance)]))
+    LedgerState::try_with_genesis([(address, balance)])
+        .map_err(|_| "genesis total supply overflows u128")
 }
 
 #[tokio::main]
@@ -155,10 +156,14 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 "result": {
                     "height": chain.chain.tip_height,
                     "blockHash": chain.chain.tip_hash,
+                    "issuedSupply": chain.chain.ledger.issued_supply.to_string(),
+                    "circulatingSupply": chain.chain.ledger.circulating_supply().unwrap_or_default().to_string(),
+                    "burnedFees": chain.chain.ledger.burned_fees.to_string(),
                     "totalFees": chain.chain.ledger.total_fees.to_string(),
                     "totalFeesAsset": "BVRX",
                     "totalFeesUnit": "base-unit",
-                    "totalFeesEncoding": "decimal-string"
+                    "totalFeesEncoding": "decimal-string",
+                    "supplyInvariantHolds": chain.chain.ledger.supply_invariant_holds()
                 }
             }))
         }
