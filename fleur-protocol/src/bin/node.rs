@@ -396,7 +396,7 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
 
 fn decode_hex(input: &str) -> Result<Vec<u8>, ()> {
     let input = input.strip_prefix("0x").unwrap_or(input);
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return Err(());
     }
     (0..input.len())
@@ -498,8 +498,8 @@ mod tests {
             previous_hash: "FLEUR_GENESIS_V1".to_string(),
             transactions: vec![SignedTransaction {
                 transaction: tx,
-                public_key: hex_encode(&public_key),
-                signature: hex_encode(&signature.to_bytes()),
+                public_key: hex::encode(public_key),
+                signature: hex::encode(signature.to_bytes()),
             }],
         };
         let mut persistent = PersistentChain::open(
