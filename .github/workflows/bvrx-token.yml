@@ -6,6 +6,7 @@ on:
     paths:
       - "bvrx-token/**"
       - ".github/workflows/bvrx-token.yml"
+      - ".github/workflows/bvrx-token-deploy-testnet.yml"
   pull_request:
     paths:
       - "bvrx-token/**"
