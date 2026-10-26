@@ -1,0 +1,46 @@
+name: Deploy BVRX to BSC Testnet
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-testnet:
+    runs-on: ubuntu-latest
+    environment: bsc-testnet
+    defaults:
+      run:
+        working-directory: bvrx-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/bvrx-bep20-testnet
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: bvrx-token/package-lock.json
+      - name: Require testnet wallet secret
+        env:
+          BSC_TESTNET_PRIVATE_KEY: ${{ secrets.BSC_TESTNET_PRIVATE_KEY }}
+        run: |
+          if [ -z "$BSC_TESTNET_PRIVATE_KEY" ]; then
+            echo "::error::Add BSC_TESTNET_PRIVATE_KEY in repository Actions secrets before running deployment."
+            exit 1
+          fi
+      - name: Install dependencies
+        run: npm ci
+      - name: Compile and test
+        run: |
+          npm run compile
+          npm test
+      - name: Deploy fixed 1 billion BVRX to BSC Testnet only
+        env:
+          BSC_TESTNET_PRIVATE_KEY: ${{ secrets.BSC_TESTNET_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: https://bsc-testnet-dataseed.bnbchain.org
+          BVRX_INITIAL_SUPPLY: "1000000000"
+        run: npm run deploy:testnet
