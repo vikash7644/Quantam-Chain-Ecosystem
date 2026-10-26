@@ -738,8 +738,14 @@ mod tests {
         assert_eq!(response.0["result"]["name"], "Fleur Network Native Coin");
         assert_eq!(response.0["result"]["symbol"], "BVRX");
         assert_eq!(response.0["result"]["assetType"], "native");
-        assert_eq!(response.0["result"]["supplyPolicy"], "genesis-configuration-defined");
-        assert_eq!(response.0["result"]["issuanceModel"], "genesis-balance-only");
+        assert_eq!(
+            response.0["result"]["supplyPolicy"],
+            "genesis-configuration-defined"
+        );
+        assert_eq!(
+            response.0["result"]["issuanceModel"],
+            "genesis-balance-only"
+        );
         assert_eq!(response.0["result"]["mintingRpcEnabled"], false);
         assert_eq!(response.0["result"]["networkStatus"], "development-only");
     }
