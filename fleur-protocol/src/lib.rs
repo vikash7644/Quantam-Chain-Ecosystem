@@ -99,7 +99,8 @@ pub struct LedgerState {
 
 impl LedgerState {
     pub fn with_genesis(balances: impl IntoIterator<Item = (Address, Amount)>) -> Self {
-        Self::try_with_genesis(balances).expect("genesis balances must have a representable total supply")
+        Self::try_with_genesis(balances)
+            .expect("genesis balances must have a representable total supply")
     }
 
     /// Build genesis while rejecting aggregate supply overflow.
@@ -108,7 +109,8 @@ impl LedgerState {
     ) -> Result<Self, ProtocolError> {
         let balances: BTreeMap<Address, Amount> = balances.into_iter().collect();
         let issued_supply = balances.values().try_fold(0u128, |sum, amount| {
-            sum.checked_add(*amount).ok_or(ProtocolError::AmountOverflow)
+            sum.checked_add(*amount)
+                .ok_or(ProtocolError::AmountOverflow)
         })?;
         Ok(Self {
             balances,
