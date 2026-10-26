@@ -508,10 +508,8 @@ mod tests {
 
     #[test]
     fn rejected_persistent_block_is_not_written_to_journal() {
-        let path = std::env::temp_dir().join(format!(
-            "fleur-rejected-block-{}.jsonl",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fleur-rejected-block-{}.jsonl", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let signed = signed_transfer(0, 7, 1);
         let sender = signed.transaction.sender.clone();
