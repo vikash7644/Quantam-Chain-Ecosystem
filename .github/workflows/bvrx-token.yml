@@ -1,0 +1,35 @@
+name: BVRX Token CI
+
+on:
+  push:
+    branches: [main, fleur-testnet-sprint, feat/bvrx-bep20-testnet]
+    paths:
+      - "bvrx-token/**"
+      - ".github/workflows/bvrx-token.yml"
+  pull_request:
+    paths:
+      - "bvrx-token/**"
+      - ".github/workflows/bvrx-token.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bvrx-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: bvrx-token/package-lock.json
+      - name: Install dependencies
+        run: npm install
+      - name: Compile contracts
+        run: npm run compile
+      - name: Run tests
+        run: npm test
