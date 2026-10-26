@@ -1,0 +1,37 @@
+name: Fleur Protocol CI
+
+on:
+  push:
+    branches: [main, fleur-testnet-sprint]
+    paths:
+      - "fleur-protocol/**"
+      - ".github/workflows/fleur-protocol.yml"
+  pull_request:
+    paths:
+      - "fleur-protocol/**"
+      - ".github/workflows/fleur-protocol.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protocol:
+    name: Rust protocol tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fleur-protocol
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy lint
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Unit tests
+        run: cargo test --all-targets
+      - name: Build release binary
+        run: cargo build --release
+      - name: End-to-end EVM JSON-RPC smoke test
+        run: sh scripts/evm-smoke.sh
