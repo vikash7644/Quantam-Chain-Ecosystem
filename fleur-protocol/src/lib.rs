@@ -86,16 +86,53 @@ impl Block {
 pub struct LedgerState {
     balances: BTreeMap<Address, Amount>,
     nonces: BTreeMap<Address, u64>,
+    /// Sum initially issued by genesis. Transfers never increase this value.
+    #[serde(default)]
+    pub issued_supply: Amount,
+    /// Fees deducted from senders and not credited to a recipient are treated as burned.
+    #[serde(default)]
+    pub burned_fees: Amount,
+    /// Cumulative fees charged; currently these are burned, not paid to a validator.
+    #[serde(default)]
     pub total_fees: Amount,
 }
 
 impl LedgerState {
     pub fn with_genesis(balances: impl IntoIterator<Item = (Address, Amount)>) -> Self {
-        Self {
-            balances: balances.into_iter().collect(),
+        Self::try_with_genesis(balances).expect("genesis balances must have a representable total supply")
+    }
+
+    /// Build genesis while rejecting aggregate supply overflow.
+    pub fn try_with_genesis(
+        balances: impl IntoIterator<Item = (Address, Amount)>,
+    ) -> Result<Self, ProtocolError> {
+        let balances: BTreeMap<Address, Amount> = balances.into_iter().collect();
+        let issued_supply = balances.values().try_fold(0u128, |sum, amount| {
+            sum.checked_add(*amount).ok_or(ProtocolError::AmountOverflow)
+        })?;
+        Ok(Self {
+            balances,
             nonces: BTreeMap::new(),
+            issued_supply,
+            burned_fees: 0,
             total_fees: 0,
-        }
+        })
+    }
+
+    /// Current spendable balances, excluding fees burned by the protocol.
+    pub fn circulating_supply(&self) -> Result<Amount, ProtocolError> {
+        self.balances.values().try_fold(0u128, |sum, amount| {
+            sum.checked_add(*amount).ok_or(ProtocolError::AmountOverflow)
+        })
+    }
+
+    /// Verify conservation: circulating balances plus burned fees equal genesis issuance.
+    pub fn supply_invariant_holds(&self) -> bool {
+        self.circulating_supply()
+            .ok()
+            .and_then(|circulating| circulating.checked_add(self.burned_fees))
+            == Some(self.issued_supply)
+            && self.total_fees == self.burned_fees
     }
 
     pub fn balance(&self, address: &str) -> Amount {
@@ -146,6 +183,10 @@ impl LedgerState {
             .total_fees
             .checked_add(tx.fee)
             .ok_or(ProtocolError::AmountOverflow)?;
+        let new_burned_fees = self
+            .burned_fees
+            .checked_add(tx.fee)
+            .ok_or(ProtocolError::AmountOverflow)?;
         let next_nonce = expected_nonce
             .checked_add(1)
             .ok_or(ProtocolError::NonceOverflow)?;
@@ -154,6 +195,8 @@ impl LedgerState {
         self.balances.insert(tx.recipient.clone(), new_recipient);
         self.nonces.insert(tx.sender.clone(), next_nonce);
         self.total_fees = new_fees;
+        self.burned_fees = new_burned_fees;
+        debug_assert!(self.supply_invariant_holds());
         Ok(())
     }
 
@@ -372,11 +415,34 @@ mod tests {
             (signed.transaction.sender.clone(), 100),
             ("flr_recipient".into(), 5),
         ]);
+        assert_eq!(state.issued_supply, 105);
         state.apply_signed_transfer(&signed).unwrap();
         assert_eq!(state.balance(&signed.transaction.sender), 68);
         assert_eq!(state.balance("flr_recipient"), 35);
         assert_eq!(state.total_fees, 2);
+        assert_eq!(state.burned_fees, 2);
+        assert_eq!(state.circulating_supply().unwrap(), 103);
+        assert_eq!(state.issued_supply, 105);
+        assert!(state.supply_invariant_holds());
         assert_eq!(state.next_nonce(&signed.transaction.sender), 1);
+    }
+
+    #[test]
+    fn genesis_rejects_aggregate_supply_overflow() {
+        assert_eq!(
+            LedgerState::try_with_genesis([("alice".into(), u128::MAX), ("bob".into(), 1)]),
+            Err(ProtocolError::AmountOverflow)
+        );
+    }
+
+    #[test]
+    fn transfers_cannot_mint_supply_and_fees_reduce_circulating_supply() {
+        let mut state = LedgerState::with_genesis([("alice".into(), 100)]);
+        state.apply_transfer(&transfer(0, 25, 3)).unwrap();
+        assert_eq!(state.issued_supply, 100);
+        assert_eq!(state.circulating_supply().unwrap(), 97);
+        assert_eq!(state.burned_fees, 3);
+        assert!(state.supply_invariant_holds());
     }
 
     #[test]
