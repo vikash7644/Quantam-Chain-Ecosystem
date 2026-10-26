@@ -124,7 +124,8 @@ impl LedgerState {
     /// Current spendable balances, excluding fees burned by the protocol.
     pub fn circulating_supply(&self) -> Result<Amount, ProtocolError> {
         self.balances.values().try_fold(0u128, |sum, amount| {
-            sum.checked_add(*amount).ok_or(ProtocolError::AmountOverflow)
+            sum.checked_add(*amount)
+                .ok_or(ProtocolError::AmountOverflow)
         })
     }
 
