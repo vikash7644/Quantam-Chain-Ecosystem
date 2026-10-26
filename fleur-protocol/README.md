@@ -8,6 +8,8 @@ but it does not share state with the persistent ledger.
 ## Implemented in this development slice
 
 - Deterministic transfer ledger with checked arithmetic and fee accounting.
+- Genesis-issued native supply is tracked with checked u128 arithmetic; current circulating balances and burned transfer fees are exposed in chain status.
+- Transfers cannot mint supply; supply-invariant tests check that circulating balances plus burned fees equal genesis issuance.
 - Ed25519 signatures with public-key-to-sender binding and tamper rejection.
 - Per-sender sequential nonces to reject replayed transactions.
 - Atomic block application that rejects invalid transactions without partial state changes.
@@ -105,4 +107,4 @@ The persistent method appends the deployment/call command to the EVM JSONL journ
 9. End-to-end testnet scripts and explorer-facing APIs.
 10. CI evidence, operational docs, and limitations report.
 
-The sprint target is a testnet prototype, not a security-audited mainnet.
+Transfer fees are currently burned rather than paid to validators, and no fixed maximum supply cap has been finalized. The sprint target is a testnet prototype, not a security-audited mainnet.
