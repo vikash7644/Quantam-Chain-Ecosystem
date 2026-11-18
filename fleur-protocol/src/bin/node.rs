@@ -238,6 +238,54 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                 }
             }))
         }
+        "fleur_produceBlock" => {
+            let Some(values) = params.get("signedTransactions").and_then(Value::as_array) else {
+                return rpc_error(
+                    id,
+                    -32602,
+                    "params.signedTransactions must be an array",
+                );
+            };
+            if values.is_empty() {
+                return rpc_error(id, -32602, "a block must contain at least one transaction");
+            }
+            const MAX_BLOCK_TRANSACTIONS: usize = 1_024;
+            if values.len() > MAX_BLOCK_TRANSACTIONS {
+                return rpc_error(id, -32602, "block transaction limit exceeded");
+            }
+            let transactions: Vec<SignedTransaction> = match values
+                .iter()
+                .cloned()
+                .map(serde_json::from_value)
+                .collect()
+            {
+                Ok(transactions) => transactions,
+                Err(_) => return rpc_error(id, -32602, "Invalid signed transaction in block"),
+            };
+            let Ok(mut chain) = chain.lock() else {
+                return rpc_error(id, -32603, "Chain state lock poisoned");
+            };
+            let Some(height) = chain.chain.tip_height.checked_add(1) else {
+                return rpc_error(id, -32000, "Block height overflow");
+            };
+            let block = Block {
+                height,
+                previous_hash: chain.chain.tip_hash.clone(),
+                transactions,
+            };
+            match chain.append_block(&block) {
+                Ok(hash) => Json(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "height": height,
+                        "blockHash": hash,
+                        "transactionCount": block.transactions.len()
+                    }
+                })),
+                Err(error) => rpc_error(id, -32000, &format!("{error:?}")),
+            }
+        }
         "fleur_submitBlock" => {
             let Some(value) = params.get("block").cloned() else {
                 return rpc_error(id, -32602, "params.block is required");
@@ -829,5 +877,159 @@ mod tests {
             .as_str()
             .and_then(|gas| gas.parse::<u64>().ok())
             .is_some_and(|gas| gas > 0));
+    }
+ 
+    #[tokio::test]
+    async fn produce_block_rpc_seals_multiple_signed_transactions_atomically() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let path = std::env::temp_dir().join(format!(
+            "fleur-rpc-produce-block-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let signing_key = SigningKey::from_bytes(&[13u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = fleur_protocol::address_from_public_key(&public_key);
+        let ledger = LedgerState::with_genesis([(sender.clone(), 100)]);
+        let chain = PersistentChain::open(&path, ledger, "FLEUR_GENESIS_V1").unwrap();
+        let shared = Arc::new(Mutex::new(chain));
+        let make_signed = |nonce: u64, recipient: &str, amount: u128| {
+            let transaction = fleur_protocol::Transaction {
+                sender: sender.clone(),
+                recipient: recipient.to_string(),
+                amount,
+                fee: 1,
+                nonce,
+            };
+            let signature = signing_key.sign(&transaction.signing_bytes().unwrap());
+            SignedTransaction {
+                transaction,
+                public_key: hex_encode(&public_key),
+                signature: hex_encode(&signature.to_bytes()),
+            }
+        };
+        let response = handle_rpc(
+            State(shared.clone()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": "fleur_produceBlock",
+                "params": {
+                    "signedTransactions": [
+                        make_signed(0, "flr_batch_a", 10),
+                        make_signed(1, "flr_batch_b", 20)
+                    ]
+                }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["result"]["height"], 1);
+        assert_eq!(response.0["result"]["transactionCount"], 2);
+        let chain = shared.lock().unwrap();
+        assert_eq!(chain.chain.ledger.balance("flr_batch_a"), 10);
+        assert_eq!(chain.chain.ledger.balance("flr_batch_b"), 20);
+        assert_eq!(chain.chain.ledger.balance(&sender), 68);
+        assert_eq!(chain.chain.ledger.total_fees, 2);
+        assert!(chain.chain.ledger.supply_invariant_holds());
+        drop(chain);
+        drop(shared);
+        let replayed = PersistentChain::open(
+            &path,
+            LedgerState::with_genesis([(sender, 100)]),
+            "FLEUR_GENESIS_V1",
+        )
+        .expect("replay produced block");
+        assert_eq!(replayed.chain.tip_height, 1);
+        assert_eq!(replayed.chain.ledger.balance("flr_batch_a"), 10);
+        assert_eq!(replayed.chain.ledger.balance("flr_batch_b"), 20);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn produce_block_rpc_rejects_invalid_batch_without_partial_commit() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let path = std::env::temp_dir().join(format!(
+            "fleur-rpc-produce-invalid-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let signing_key = SigningKey::from_bytes(&[14u8; 32]);
+        let public_key = signing_key.verifying_key().to_bytes();
+        let sender = fleur_protocol::address_from_public_key(&public_key);
+        let chain = PersistentChain::open(
+            &path,
+            LedgerState::with_genesis([(sender.clone(), 100)]),
+            "FLEUR_GENESIS_V1",
+        )
+        .unwrap();
+        let shared = Arc::new(Mutex::new(chain));
+        let make_signed = |nonce: u64, recipient: &str, amount: u128| {
+            let transaction = fleur_protocol::Transaction {
+                sender: sender.clone(),
+                recipient: recipient.to_string(),
+                amount,
+                fee: 1,
+                nonce,
+            };
+            let signature = signing_key.sign(&transaction.signing_bytes().unwrap());
+            SignedTransaction {
+                transaction,
+                public_key: hex_encode(&public_key),
+                signature: hex_encode(&signature.to_bytes()),
+            }
+        };
+        let response = handle_rpc(
+            State(shared.clone()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": "fleur_produceBlock",
+                "params": {
+                    "signedTransactions": [
+                        make_signed(0, "flr_would_rollback", 10),
+                        make_signed(1, "flr_insufficient", 10_000)
+                    ]
+                }
+            })),
+        )
+        .await;
+        assert_eq!(response.0["error"]["code"], -32000);
+        let chain = shared.lock().unwrap();
+        assert_eq!(chain.chain.tip_height, 0);
+        assert_eq!(chain.chain.ledger.balance(&sender), 100);
+        assert_eq!(chain.chain.ledger.balance("flr_would_rollback"), 0);
+        assert!(!path.exists());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn produce_block_rpc_rejects_empty_and_oversized_batches() {
+        let empty = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": "fleur_produceBlock",
+                "params": { "signedTransactions": [] }
+            })),
+        )
+        .await;
+        assert_eq!(empty.0["error"]["code"], -32602);
+
+        let oversized = handle_rpc(
+            State(test_chain()),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 33,
+                "method": "fleur_produceBlock",
+                "params": {
+                    "signedTransactions": vec![json!({}); 1_025]
+                }
+            })),
+        )
+        .await;
+        assert_eq!(oversized.0["error"]["code"], -32602);
     }
 }
