@@ -64,7 +64,9 @@ curl -fsS "http://127.0.0.1:$PORT/rpc" \
   -d '{"jsonrpc":"2.0","id":14,"method":"fleur_nativeCoin"}' \
   >"$TMP_DIR/native-coin.json"
 if ! grep -q '"symbol":"BVRX"' "$TMP_DIR/native-coin.json" ||
-   ! grep -q '"supplyPolicy":"not-finalized"' "$TMP_DIR/native-coin.json" ||
+   ! grep -q '"supplyPolicy":"genesis-configuration-defined"' "$TMP_DIR/native-coin.json" ||
+   ! grep -q '"issuanceModel":"genesis-balance-only"' "$TMP_DIR/native-coin.json" ||
+   ! grep -q '"mintingRpcEnabled":false' "$TMP_DIR/native-coin.json" ||
    ! grep -q '"networkStatus":"development-only"' "$TMP_DIR/native-coin.json"; then
   cat "$TMP_DIR/native-coin.json"
   echo "Native-coin metadata did not preserve development-only caveats." >&2
