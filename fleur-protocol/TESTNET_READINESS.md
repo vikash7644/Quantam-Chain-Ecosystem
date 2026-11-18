@@ -11,7 +11,7 @@ This checklist is intentionally conservative. A passing unit-test suite is not p
 - [x] Single-node JSON-RPC for chain status, balance, and signed transfer submission.
 - [x] Single-node atomic block production RPC for bounded batches (up to 1,024 signed transactions), with rollback on any invalid transaction.
 - [ ] Persistent mempool, deterministic transaction selection/ordering policy, and proposer/finality rules.
-- [x] Native coin metadata RPC identifies BVRX and reports genesis-configuration-defined issuance; no minting RPC is exposed.
+- [x] Native coin metadata RPC identifies BVRX and reports an explicitly not-finalized issuance policy; no minting RPC is exposed.
 - [x] Genesis-issued supply tracking, checked aggregate genesis arithmetic, circulating-supply reporting, and supply invariant tests.
 - [ ] Explicit maximum supply cap and validator fee-reward policy finalized.
 - [x] Operator `GET /health` endpoint with a smoke-test check.
@@ -19,7 +19,6 @@ This checklist is intentionally conservative. A passing unit-test suite is not p
 - [ ] EVM contract state committed atomically with chain blocks.
 - [ ] EVM transaction signatures, account nonce, intrinsic gas, fee charging/refunds, and failure semantics specified and tested.
 - [x] Existing deployed-contract call path that replays persisted state changes across calls/restarts (still separate from canonical blocks).
-- [ ] Mempool policy, deterministic transaction ordering, and block production rules.
 - [ ] Multi-node peer discovery, authenticated peer messages, block propagation, and synchronization.
 - [ ] A consensus/finality mechanism with adversarial and restart tests.
 - [ ] Public-facing wallet connected to real chain RPC with transaction signing and receipt/status handling.
