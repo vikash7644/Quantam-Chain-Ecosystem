@@ -139,7 +139,7 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                     "assetType": "native",
                     "unit": "base-unit",
                     "amountEncoding": "decimal-string",
-                    "supplyPolicy": "genesis-configuration-defined",
+                    "supplyPolicy": "not-finalized",
                     "issuanceModel": "genesis-balance-only",
                     "mintingRpcEnabled": false,
                     "networkStatus": "development-only"
@@ -780,7 +780,7 @@ mod tests {
         assert_eq!(response.0["result"]["assetType"], "native");
         assert_eq!(
             response.0["result"]["supplyPolicy"],
-            "genesis-configuration-defined"
+            "not-finalized"
         );
         assert_eq!(
             response.0["result"]["issuanceModel"],
