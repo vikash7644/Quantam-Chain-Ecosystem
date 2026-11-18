@@ -240,11 +240,7 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
         }
         "fleur_produceBlock" => {
             let Some(values) = params.get("signedTransactions").and_then(Value::as_array) else {
-                return rpc_error(
-                    id,
-                    -32602,
-                    "params.signedTransactions must be an array",
-                );
+                return rpc_error(id, -32602, "params.signedTransactions must be an array");
             };
             if values.is_empty() {
                 return rpc_error(id, -32602, "a block must contain at least one transaction");
@@ -253,15 +249,11 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             if values.len() > MAX_BLOCK_TRANSACTIONS {
                 return rpc_error(id, -32602, "block transaction limit exceeded");
             }
-            let transactions: Vec<SignedTransaction> = match values
-                .iter()
-                .cloned()
-                .map(serde_json::from_value)
-                .collect()
-            {
-                Ok(transactions) => transactions,
-                Err(_) => return rpc_error(id, -32602, "Invalid signed transaction in block"),
-            };
+            let transactions: Vec<SignedTransaction> =
+                match values.iter().cloned().map(serde_json::from_value).collect() {
+                    Ok(transactions) => transactions,
+                    Err(_) => return rpc_error(id, -32602, "Invalid signed transaction in block"),
+                };
             let Ok(mut chain) = chain.lock() else {
                 return rpc_error(id, -32603, "Chain state lock poisoned");
             };
@@ -878,7 +870,7 @@ mod tests {
             .and_then(|gas| gas.parse::<u64>().ok())
             .is_some_and(|gas| gas > 0));
     }
- 
+
     #[tokio::test]
     async fn produce_block_rpc_seals_multiple_signed_transactions_atomically() {
         use ed25519_dalek::{Signer, SigningKey};
