@@ -254,6 +254,10 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
                     Ok(transactions) => transactions,
                     Err(_) => return rpc_error(id, -32602, "Invalid signed transaction in block"),
                 };
+            // A proposer must not let caller-supplied array order choose block
+            // transaction order. Canonical ordering is sender, nonce, then
+            // transaction fields, making equivalent batches deterministic.
+            let transactions = canonicalize_signed_transactions(transactions);
             let Ok(mut chain) = chain.lock() else {
                 return rpc_error(id, -32603, "Chain state lock poisoned");
             };
@@ -438,6 +442,62 @@ async fn handle_rpc(State(chain): State<SharedChain>, Json(request): Json<Value>
             }
         }
         _ => rpc_error(id, -32601, "Method not found"),
+    }
+}
+
+fn canonicalize_signed_transactions(
+    mut transactions: Vec<SignedTransaction>,
+) -> Vec<SignedTransaction> {
+    transactions.sort_by(|left, right| {
+        let left = &left.transaction;
+        let right = &right.transaction;
+        left.sender
+            .cmp(&right.sender)
+            .then_with(|| left.nonce.cmp(&right.nonce))
+            .then_with(|| left.recipient.cmp(&right.recipient))
+            .then_with(|| left.amount.cmp(&right.amount))
+            .then_with(|| left.fee.cmp(&right.fee))
+    });
+    transactions
+}
+
+#[cfg(test)]
+mod canonical_order_tests {
+    use super::*;
+
+    fn tx(sender: &str, nonce: u64, recipient: &str) -> SignedTransaction {
+        SignedTransaction {
+            transaction: fleur_protocol::Transaction {
+                sender: sender.to_string(),
+                recipient: recipient.to_string(),
+                amount: 1,
+                fee: 1,
+                nonce,
+            },
+            public_key: String::new(),
+            signature: String::new(),
+        }
+    }
+
+    #[test]
+    fn proposer_order_is_independent_of_input_order_and_preserves_sender_nonce_order() {
+        let ordered = canonicalize_signed_transactions(vec![
+            tx("flr_b", 0, "flr_z"),
+            tx("flr_a", 1, "flr_y"),
+            tx("flr_a", 0, "flr_x"),
+        ]);
+        let keys: Vec<_> = ordered
+            .iter()
+            .map(|item| (item.transaction.sender.as_str(), item.transaction.nonce))
+            .collect();
+        assert_eq!(keys, vec![("flr_a", 0), ("flr_a", 1), ("flr_b", 0)]);
+
+        let reversed = canonicalize_signed_transactions(vec![
+            tx("flr_a", 0, "flr_x"),
+            tx("flr_a", 1, "flr_y"),
+            tx("flr_b", 0, "flr_z"),
+        ]);
+        assert_eq!(ordered, reversed);
     }
 }
 
