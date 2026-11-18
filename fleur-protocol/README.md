@@ -19,7 +19,7 @@ but it does not share state with the persistent ledger.
 - `fleur_getBalance` returns the balance as a decimal string with `asset: BVRX`, `unit: base-unit`, and `amountEncoding: decimal-string`; no human-facing decimal precision has been finalized.
 - JSON-RPC method `fleur_nativeCoin` identifies the planned BVRX native asset; it explicitly marks the supply policy as not finalized and network status as development-only. This metadata is not evidence of a public launch or integrated gas settlement.
 - Single-node HTTP JSON-RPC methods: `fleur_chainStatus`, `fleur_getBalance`,
-  `fleur_submitTransaction`, `fleur_submitBlock` for atomic validation of a supplied multi-transaction block, and `fleur_getBlockByHeight` for persisted block lookup.
+  `fleur_submitTransaction`, `fleur_produceBlock` to construct and atomically seal a block from up to 1,024 signed transactions, `fleur_submitBlock` for validating an explicitly supplied block, and `fleur_getBlockByHeight` for persisted block lookup. `fleur_produceBlock` is a single-node development block-production API, not a mempool or distributed proposer.
 - Initial Ethereum metadata compatibility methods: `eth_chainId` (development chain ID defaults to decimal 61800 / `0xf168`; override with `FLEUR_CHAIN_ID`) and `eth_blockNumber`. These are a small RPC subset, not full Ethereum JSON-RPC compatibility.
 - A pinned REVM 43.0.3 execution sandbox plus a replayable EVM command journal. `fleur_evmPersistentDeployAndCall` deploys bytecode and calls it; `fleur_evmPersistentCall` replays the journal and calls an existing contract address.
 - GitHub Actions checks for formatting, tests, and a release build.
