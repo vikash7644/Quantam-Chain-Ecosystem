@@ -9,6 +9,8 @@ This checklist is intentionally conservative. A passing unit-test suite is not p
 - [x] Sender nonce replay protection.
 - [x] Block height/parent continuity checks and append-only block journal replay.
 - [x] Single-node JSON-RPC for chain status, balance, and signed transfer submission.
+- [x] Single-node atomic block production RPC for bounded batches (up to 1,024 signed transactions), with rollback on any invalid transaction.
+- [ ] Persistent mempool, deterministic transaction selection/ordering policy, and proposer/finality rules.
 - [x] Native coin metadata RPC identifies BVRX and reports genesis-configuration-defined issuance; no minting RPC is exposed.
 - [x] Genesis-issued supply tracking, checked aggregate genesis arithmetic, circulating-supply reporting, and supply invariant tests.
 - [ ] Explicit maximum supply cap and validator fee-reward policy finalized.
