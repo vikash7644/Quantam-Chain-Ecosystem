@@ -778,10 +778,7 @@ mod tests {
         assert_eq!(response.0["result"]["name"], "Fleur Network Native Coin");
         assert_eq!(response.0["result"]["symbol"], "BVRX");
         assert_eq!(response.0["result"]["assetType"], "native");
-        assert_eq!(
-            response.0["result"]["supplyPolicy"],
-            "not-finalized"
-        );
+        assert_eq!(response.0["result"]["supplyPolicy"], "not-finalized");
         assert_eq!(
             response.0["result"]["issuanceModel"],
             "genesis-balance-only"
